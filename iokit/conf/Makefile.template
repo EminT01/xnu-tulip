@@ -65,6 +65,9 @@ COMP_SUBDIRS = \
 # -Wno-cast-align
 IODataQueue.cpo_CXXWARNFLAGS_ADD += -Wno-cast-align
 IOHibernateIO.cpo_CXXWARNFLAGS_ADD += -Wno-cast-align
+hfs_iokit.cpo_INCFLAGS = -I$(SRCROOT)/bsd/hfs/core -I$(SRCROOT)/bsd/hfs
+hfs_iokit.cpo_CFLAGS_ADD += -include $(SRCROOT)/bsd/hfs/tulip_hfs_config.h -DPRIVATE=1
+hfs_iokit.cpo_CFLAGS_RM = -DXNU_KERNEL_PRIVATE -DIOKIT_KERNEL_PRIVATE -DCONFIG_PROTECT
 IOHibernateRestoreKernel.o_CWARNFLAGS_ADD += -Wno-cast-align
 IONVRAM.cpo_CXXWARNFLAGS_ADD += -Wno-cast-align
 IOSharedDataQueue.cpo_CXXWARNFLAGS_ADD += -Wno-cast-align

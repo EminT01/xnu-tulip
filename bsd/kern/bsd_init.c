@@ -473,6 +473,9 @@ bsd_rooted_ramdisk(void)
  * of the tro_ucred field so that the uthread structure can be
  * used like any other.
  */
+#if CONFIG_TULIP
+extern void tulip_hfs_start(void);
+#endif
 void
 bsd_init(void)
 {
@@ -690,6 +693,9 @@ bsd_init(void)
 	/* Initialize the file systems. */
 	bsd_init_kprintf("calling vfsinit\n");
 	vfsinit();
+#if CONFIG_TULIP
+	tulip_hfs_start();
+#endif
 
 #if CONFIG_PROC_UUID_POLICY
 	/* Initial proc_uuid_policy subsystem */

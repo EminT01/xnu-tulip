@@ -365,6 +365,45 @@ bsd/pthread/libpthread/kern/pthread_kern_init.c		optional config_tulip
 bsd/pthread/libpthread/kern/pthread_kern_support.c	optional config_tulip
 bsd/pthread/libpthread/kern/pthread_kern_synch.c	optional config_tulip
 bsd/kern/tulip_amfi.c			optional config_tulip
+bsd/hfs/core/BTree.c	optional config_tulip
+bsd/hfs/core/BTreeAllocate.c	optional config_tulip
+bsd/hfs/core/BTreeMiscOps.c	optional config_tulip
+bsd/hfs/core/BTreeNodeOps.c	optional config_tulip
+bsd/hfs/core/BTreeNodeReserve.c	optional config_tulip
+bsd/hfs/core/BTreeScanner.c	optional config_tulip
+bsd/hfs/core/BTreeTreeOps.c	optional config_tulip
+bsd/hfs/core/BTreeWrapper.c	optional config_tulip
+bsd/hfs/core/CatalogUtilities.c	optional config_tulip
+bsd/hfs/core/FileExtentMapping.c	optional config_tulip
+bsd/hfs/core/FileIDsServices.c	optional config_tulip
+bsd/hfs/core/MacOSStubs.c	optional config_tulip
+bsd/hfs/core/UnicodeWrappers.c	optional config_tulip
+bsd/hfs/core/VolumeAllocation.c	optional config_tulip
+bsd/hfs/hfs_encodings/hfs_encodings.c	optional config_tulip
+bsd/hfs/hfs_encodings/hfs_encodinghint.c	optional config_tulip
+bsd/hfs/core/hfs_attrlist.c	optional config_tulip
+bsd/hfs/core/hfs_btreeio.c	optional config_tulip
+bsd/hfs/core/hfs_catalog.c	optional config_tulip
+bsd/hfs/core/hfs_chash.c	optional config_tulip
+bsd/hfs/core/hfs_cnode.c	optional config_tulip
+bsd/hfs/core/hfs_cprotect.c	optional config_tulip
+bsd/hfs/core/hfs_endian.c	optional config_tulip
+bsd/hfs/core/hfs_extents.c	optional config_tulip
+bsd/hfs/core/hfs_fsinfo.c	optional config_tulip
+bsd/hfs/core/hfs_hotfiles.c	optional config_tulip
+bsd/hfs/core/hfs_journal.c	optional config_tulip
+bsd/hfs/core/hfs_link.c	optional config_tulip
+bsd/hfs/core/hfs_lookup.c	optional config_tulip
+bsd/hfs/core/hfs_notification.c	optional config_tulip
+bsd/hfs/core/hfs_quota.c	optional config_tulip
+bsd/hfs/core/hfs_readwrite.c	optional config_tulip
+bsd/hfs/core/hfs_resize.c	optional config_tulip
+bsd/hfs/core/hfs_search.c	optional config_tulip
+bsd/hfs/core/hfs_vfsops.c	optional config_tulip
+bsd/hfs/core/hfs_vfsutils.c	optional config_tulip
+bsd/hfs/core/hfs_vnops.c	optional config_tulip
+bsd/hfs/core/hfs_xattr.c	optional config_tulip
+bsd/hfs/core/rangelist.c	optional config_tulip
 bsd/pthread/pthread_priority.c		standard
 bsd/pthread/pthread_workqueue.c		standard
 
