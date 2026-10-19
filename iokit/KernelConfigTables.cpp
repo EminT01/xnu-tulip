@@ -58,6 +58,12 @@ const char * gIOKernelConfigTables =
     "     'IOResourceMatch' = IOKit;"
     "     'IOMatchCategory' = AppleKeyStore;"
     "   },"
+    "   {"
+    "     'IOClass'         = IOCoreSurfaceRoot;"
+    "     'IOProviderClass' = IOResources;"
+    "     'IOResourceMatch' = IOKit;"
+    "     'IOMatchCategory' = IOCoreSurfaceRoot;"
+    "   },"
 #endif
     "   {"
     "     'IOClass'         = IOPanicPlatform;"
