@@ -734,6 +734,108 @@ md5_self_test(void)
 	}
 }
 
+static const uint32_t sha1_initial[5] = {
+	0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0,
+};
+
+static void
+sha1_compress(ccdigest_state_t state, size_t nblocks, const void *data)
+{
+	uint32_t *h = (uint32_t *)state;
+	const uint8_t *p = data;
+
+	while (nblocks--) {
+		uint32_t w[80], a, b, c, d, e;
+
+		for (int i = 0; i < 16; i++) {
+			w[i] = ((uint32_t)p[4 * i] << 24) | ((uint32_t)p[4 * i + 1] << 16) |
+			    ((uint32_t)p[4 * i + 2] << 8) | p[4 * i + 3];
+		}
+		for (int i = 16; i < 80; i++) {
+			w[i] = rol32(w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16], 1);
+		}
+		a = h[0]; b = h[1]; c = h[2]; d = h[3]; e = h[4];
+		for (int i = 0; i < 80; i++) {
+			uint32_t f, k;
+			if (i < 20) {
+				f = (b & c) | (~b & d);
+				k = 0x5a827999;
+			} else if (i < 40) {
+				f = b ^ c ^ d;
+				k = 0x6ed9eba1;
+			} else if (i < 60) {
+				f = (b & c) | (b & d) | (c & d);
+				k = 0x8f1bbcdc;
+			} else {
+				f = b ^ c ^ d;
+				k = 0xca62c1d6;
+			}
+			uint32_t t = rol32(a, 5) + f + e + k + w[i];
+			e = d; d = c; c = rol32(b, 30); b = a; a = t;
+		}
+		h[0] += a; h[1] += b; h[2] += c; h[3] += d; h[4] += e;
+		p += 64;
+	}
+}
+
+static void
+sha1_final(const struct ccdigest_info *di, ccdigest_ctx_t ctx, unsigned char *digest)
+{
+	uint8_t *buf = ccdigest_data(di, ctx);
+	unsigned int num = ccdigest_num(di, ctx);
+	uint64_t bits = ccdigest_nbits(di, ctx) + (uint64_t)num * 8;
+	uint32_t *h = (uint32_t *)ccdigest_state(di, ctx);
+
+	buf[num++] = 0x80;
+	if (num > 56) {
+		memset(buf + num, 0, 64 - num);
+		sha1_compress(ccdigest_state(di, ctx), 1, buf);
+		num = 0;
+	}
+	memset(buf + num, 0, 56 - num);
+	for (int i = 0; i < 8; i++) {
+		buf[56 + i] = (uint8_t)(bits >> (56 - 8 * i));
+	}
+	sha1_compress(ccdigest_state(di, ctx), 1, buf);
+	for (int i = 0; i < 5; i++) {
+		digest[4 * i] = (uint8_t)(h[i] >> 24);
+		digest[4 * i + 1] = (uint8_t)(h[i] >> 16);
+		digest[4 * i + 2] = (uint8_t)(h[i] >> 8);
+		digest[4 * i + 3] = (uint8_t)h[i];
+	}
+}
+
+static const unsigned char sha1_oid[] = { 0x06, 0x05, 0x2b, 0x0e, 0x03, 0x02, 0x1a };
+
+static const struct ccdigest_info tulip_sha1_di = {
+	.output_size = 20,
+	.state_size = 20,
+	.block_size = 64,
+	.oid_size = sizeof(sha1_oid),
+	.oid = sha1_oid,
+	.initial_state = sha1_initial,
+	.compress = sha1_compress,
+	.final = sha1_final,
+};
+
+static void
+sha1_self_test(void)
+{
+	static const uint8_t expect[20] = {
+		0xa9, 0x99, 0x3e, 0x36, 0x47, 0x06, 0x81, 0x6a, 0xba, 0x3e,
+		0x25, 0x71, 0x78, 0x50, 0xc2, 0x6c, 0x9c, 0xd0, 0xd8, 0x9d,
+	};
+	ccdigest_di_decl(&tulip_sha1_di, ctx);
+	uint8_t out[20];
+
+	tulip_digest_init(&tulip_sha1_di, ctx);
+	tulip_digest_update(&tulip_sha1_di, ctx, 3, "abc");
+	sha1_final(&tulip_sha1_di, ctx, out);
+	if (memcmp(out, expect, 20) != 0) {
+		panic("tulip_crypto: SHA-1 self-test failed");
+	}
+}
+
 static struct crypto_functions tulip_crypto_funcs = {
 	.random_generate_fn = tulip_random_generate,
 	.random_uniform_fn = tulip_random_uniform,
@@ -746,6 +848,7 @@ static struct crypto_functions tulip_crypto_funcs = {
 	.ccrng_fn = tulip_ccrng_fn,
 	.ccdigest_init_fn = tulip_digest_init,
 	.ccdigest_update_fn = tulip_digest_update,
+	.ccsha1_di = &tulip_sha1_di,
 	.ccsha256_di = &tulip_sha256_di,
 	.ccmd5_di = &tulip_md5_di,
 };
@@ -755,6 +858,7 @@ tulip_crypto_register(void)
 {
 	aes_tables_init();
 	aes_self_test();
+	sha1_self_test();
 	sha256_self_test();
 	md5_self_test();
 	register_crypto_functions(&tulip_crypto_funcs);
