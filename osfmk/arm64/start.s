@@ -170,7 +170,7 @@ LEXT(reset_vector)
 	adrp	x19, EXT(ResetHandlerData)@page			// Get address of the reset handler data
 	add		x19, x19, EXT(ResetHandlerData)@pageoff
 	mrs		x15, MPIDR_EL1						// Load MPIDR to get CPU number
-#if HAS_CLUSTER
+#if HAS_CLUSTER || defined(TULIP)
 	and		x0, x15, #0xFFFF					// CPU number in Affinity0, cluster ID in Affinity1
 #else
 	and		x0, x15, #0xFF						// CPU number is in MPIDR Affinity Level 0
