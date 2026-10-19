@@ -159,6 +159,9 @@
 #include <security/mac_mach_internal.h>
 #if CONFIG_VNGUARD
 extern void vnguard_policy_init(void);
+#if CONFIG_TULIP
+extern void tulip_sandbox_policy_init(void);
+#endif
 #endif
 #endif
 
@@ -726,6 +729,9 @@ kernel_bootstrap_thread(void)
 #if CONFIG_VNGUARD
 	kernel_bootstrap_log("vnguard_policy_init");
 	vnguard_policy_init();
+#if CONFIG_TULIP
+	tulip_sandbox_policy_init();
+#endif
 #endif
 #endif
 
