@@ -69,6 +69,7 @@
 #include <debug.h>
 #if CONFIG_TULIP
 #include <pexpert/arm64/tulip_log.h>
+#include <arm64/tulip_crypto.h>
 #endif
 #include <mach_kdp.h>
 
@@ -694,6 +695,10 @@ kernel_bootstrap_thread(void)
 	vm_kernel_addrhash_salt_ext = early_random();
 
 #ifdef  IOKIT
+#if CONFIG_TULIP
+	/* The platform UUID is a SHA-1, computed while IOKit starts. */
+	tulip_crypto_register();
+#endif
 	kernel_bootstrap_log("PE_init_iokit");
 	PE_init_iokit();
 #endif

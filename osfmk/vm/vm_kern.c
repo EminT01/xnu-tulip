@@ -63,9 +63,6 @@
  *	Kernel memory management.
  */
 
-#if CONFIG_TULIP
-#include <arm64/tulip_crypto.h>
-#endif
 #include <mach/kern_return.h>
 #include <mach/vm_param.h>
 #include <kern/assert.h>
@@ -2450,9 +2447,6 @@ __startup_func
 static void
 kmem_crypto_init(void)
 {
-#if CONFIG_TULIP
-	tulip_crypto_register();
-#endif
 	vm_size_t ctx_size = crypto_random_kmem_ctx_size();
 
 	for (uint32_t i = 0; i < KMEM_NUM_SIZECLASS; i++) {
