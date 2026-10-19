@@ -36,6 +36,11 @@
 #include <sys/disk.h>
 #include <sys/errno.h>
 #include <sys/malloc.h>
+#if CONFIG_TULIP
+#include <sys/buf.h>
+#include <mach-o/loader.h>
+#include <mach-o/fat.h>
+#endif
 #include <sys/mount_internal.h>
 #include <sys/vnode_internal.h>
 
@@ -71,10 +76,27 @@ mockfs_mountroot(mount_t mp, vnode_t rvp, __unused vfs_context_t ctx)
 	mockfs_mount_t mockfs_mount_data = NULL;
 	dk_memdev_info_t memdev_info;
 
+#if CONFIG_TULIP
+	{
+		buf_t bp = NULL;
+		uint32_t magic = 0;
+
+		if (buf_meta_bread(rvp, 0, DEV_BSIZE, NOCRED, &bp) == 0) {
+			magic = *(uint32_t *)buf_dataptr(bp);
+		}
+		if (bp) {
+			buf_brelse(bp);
+		}
+		if (magic != MH_MAGIC_64 && magic != FAT_MAGIC && magic != FAT_CIGAM) {
+			return EINVAL;
+		}
+	}
+#else
 	/*
 	 * TODO: Validate that the device at least LOOKS like a mach-o (has a sane header); this would prevent us
 	 *   from causing EBADMACHO panics further along the boot path.
 	 */
+#endif
 
 	/*
 	 * There are no M_MOCKFS* definitions at the moment, just use M_TEMP.
