@@ -2605,6 +2605,26 @@ is_io_service_match_property_table_bin(
 	return internal_io_service_match_property_table(service, matching, matchingCnt, matches);
 }
 
+#if CONFIG_TULIP
+static TUNABLE(bool, tulip_iokitlog, "tulip_iokitlog", false);
+
+static void
+tulip_iokit_log_matching(const char *what, OSDictionary *dict, bool found)
+{
+	if (!tulip_iokitlog) {
+		return;
+	}
+	char name[32];
+	proc_selfname(name, sizeof(name));
+	OSSerialize *ser = OSSerialize::withCapacity(256);
+	if (ser && dict->serialize(ser)) {
+		kprintf("iokit: %s[%d] %s %s: %.300s\n", name, proc_selfpid(), what,
+		    found ? "found" : "NOT FOUND", ser->text());
+	}
+	OSSafeReleaseNULL(ser);
+}
+#endif
+
 static kern_return_t
 internal_io_service_get_matching_services(
 	mach_port_t main_port,
@@ -2625,7 +2645,15 @@ internal_io_service_get_matching_services(
 
 	if ((dict = OSDynamicCast( OSDictionary, obj))) {
 		IOTaskRegistryCompatibilityMatching(current_task(), dict);
-		*existing = IOUserIterator::withIterator(IOService::getMatchingServices( dict ));
+		OSIterator *iter = IOService::getMatchingServices( dict );
+#if CONFIG_TULIP
+		if (iter) {
+			bool any = iter->getNextObject() != NULL;
+			iter->reset();
+			tulip_iokit_log_matching("match all", dict, any);
+		}
+#endif
+		*existing = IOUserIterator::withIterator(iter);
 		kr = kIOReturnSuccess;
 	} else {
 		kr = kIOReturnBadArgument;
@@ -2710,6 +2738,9 @@ internal_io_service_get_matching_service(
 		IOTaskRegistryCompatibilityMatching(current_task(), dict);
 		*service = IOService::copyMatchingService( dict );
 		kr = *service ? kIOReturnSuccess : kIOReturnNotFound;
+#if CONFIG_TULIP
+		tulip_iokit_log_matching("match one", dict, *service != NULL);
+#endif
 	} else {
 		kr = kIOReturnBadArgument;
 	}
@@ -2813,6 +2844,9 @@ internal_io_service_add_notification(
 			continue;
 		}
 		IOTaskRegistryCompatibilityMatching(current_task(), dict);
+#if CONFIG_TULIP
+		tulip_iokit_log_matching("notify", dict, true);
+#endif
 
 		if ((sym == gIOPublishNotification)
 		    || (sym == gIOFirstPublishNotification)) {
@@ -4255,6 +4289,14 @@ is_io_service_open_extended(
 
 	CHECK( IOService, _service, service );
 
+#if CONFIG_TULIP
+	if (tulip_iokitlog) {
+		char name[32];
+		proc_selfname(name, sizeof(name));
+		kprintf("iokit: %s[%d] open %s type %u\n", name, proc_selfpid(),
+		    service->getMetaClass()->getClassName(), connect_type);
+	}
+#endif
 	if (!owningTask) {
 		return kIOReturnBadArgument;
 	}
