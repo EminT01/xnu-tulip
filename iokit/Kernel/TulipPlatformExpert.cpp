@@ -22,6 +22,7 @@ public:
 	virtual const char * excludeList(void) APPLE_KEXT_OVERRIDE;
 	virtual bool start(IOService * provider) APPLE_KEXT_OVERRIDE;
 	virtual long getGMTTimeOfDay(void) APPLE_KEXT_OVERRIDE;
+	virtual void processTopLevel(IORegistryEntry *root) APPLE_KEXT_OVERRIDE;
 
 private:
 	uint64_t bootUTC;
@@ -48,6 +49,19 @@ TulipPlatformExpert::getGMTTimeOfDay(void)
 
 	absolutetime_to_nanoseconds(mach_absolute_time(), &ns);
 	return (long)(bootUTC + ns / NSEC_PER_SEC);
+}
+
+/* Nubs for /arm-io devices hang off the platform expert, so IOPlatformDevice name matching works. */
+void
+TulipPlatformExpert::processTopLevel(IORegistryEntry *root)
+{
+	IODTPlatformExpert::processTopLevel(root);
+
+	IORegistryEntry *armio = root->childFromPath("arm-io", gIODTPlane);
+	if (armio) {
+		createNubs(this, IODTFindMatchingEntries(armio, kIODTExclusive, "('gic')"));
+		armio->release();
+	}
 }
 
 const char *
