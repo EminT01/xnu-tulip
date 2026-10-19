@@ -310,6 +310,15 @@ IONVRAMCHRPHandler::init(IODTNVRAM *provider, const uint8_t *image, IOByteCount 
 			DEBUG_ALWAYS("Unable to unserialize image, len=%#x\n", (unsigned int)length);
 		}
 	}
+#if CONFIG_TULIP
+	else {
+		handler->_nvramImage = IONewZeroData(uint8_t, handler->_bankSize);
+		handler->_commonPartitionOffset = 0;
+		handler->_systemPartitionOffset = 0xFFFFFFFF;
+		handler->_systemPartitionSize = 0;
+		handler->_varDict = OSDictionary::withCapacity(1);
+	}
+#endif
 
 	return handler;
 
