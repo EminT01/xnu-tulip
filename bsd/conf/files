@@ -365,6 +365,7 @@ bsd/pthread/libpthread/kern/pthread_kern_init.c		optional config_tulip
 bsd/pthread/libpthread/kern/pthread_kern_support.c	optional config_tulip
 bsd/pthread/libpthread/kern/pthread_kern_synch.c	optional config_tulip
 bsd/kern/tulip_amfi.c			optional config_tulip
+bsd/dev/tulip_vblk.c			optional config_tulip
 bsd/hfs/core/BTree.c	optional config_tulip
 bsd/hfs/core/BTreeAllocate.c	optional config_tulip
 bsd/hfs/core/BTreeMiscOps.c	optional config_tulip

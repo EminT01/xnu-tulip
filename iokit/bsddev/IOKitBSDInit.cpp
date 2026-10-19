@@ -61,6 +61,9 @@ extern "C" {
 #endif
 
 extern dev_t mdevadd(int devid, uint64_t base, unsigned int size, int phys);
+#if CONFIG_TULIP
+extern dev_t tulip_vblk_rootdev(void);
+#endif
 extern dev_t mdevlookup(int devid);
 extern void mdevremoveall(void);
 extern int mdevgetrange(int devid, uint64_t *base, uint64_t *size);
@@ -767,6 +770,20 @@ IOFindBSDRoot( char * rootName, unsigned int rootNameSize,
 			regEntry->release();                                                            /* Toss the entry */
 		}
 	}
+
+#if CONFIG_TULIP
+	if (strncmp(rdBootVar, "vblk0", sizeof("vblk0")) == 0) {
+		*root = tulip_vblk_rootdev();
+		if (*root == NODEV) {
+			panic("IOFindBSDRoot: no virtio-blk device for rd=vblk0");
+		}
+		OSSafeReleaseNULL(matching);
+		strlcpy(rootName, "vblk0", rootNameSize);
+		IOLog("BSD root: %s, major %d, minor %d\n", rootName, major(*root), minor(*root));
+		*oflags = 0;
+		goto iofrootx;
+	}
+#endif
 
 //
 //	Now check if we are trying to root on a memory device
