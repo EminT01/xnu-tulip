@@ -29,6 +29,8 @@ private:
 
 OSDefineMetaClassAndStructors(TulipPlatformExpert, IODTPlatformExpert);
 
+extern void tulip_cpu_init(void);
+
 static void
 tulip_tick_thread(void *arg __unused, wait_result_t wr __unused)
 {
@@ -63,6 +65,7 @@ TulipPlatformExpert::excludeList(void)
 bool
 TulipPlatformExpert::start(IOService * provider)
 {
+	tulip_cpu_init();
 	if (!IODTPlatformExpert::start(provider)) {
 		return false;
 	}

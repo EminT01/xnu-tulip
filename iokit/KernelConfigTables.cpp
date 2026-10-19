@@ -41,6 +41,11 @@ const char * gIOKernelConfigTables =
     "     'IONameMatch'     = 'xiaomi,tulip';"
     "     'IOProbeScore'    = 1000:32;"
     "   },"
+    "   {"
+    "     'IOClass'         = TulipCPU;"
+    "     'IOProviderClass' = IOPlatformDevice;"
+    "     'IONameMatch'     = 'arm,cortex-a73';"
+    "   },"
 #endif
     "   {"
     "     'IOClass'         = IOPanicPlatform;"
