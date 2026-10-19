@@ -11,6 +11,7 @@
 #include <corecrypto/ccmode.h>
 #include <corecrypto/ccmode_impl.h>
 #include <corecrypto/ccrng.h>
+#include <corecrypto/ccdigest.h>
 #include <kern/debug.h>
 #include <prng/random.h>
 #include <pexpert/arm64/board_config.h>
@@ -460,6 +461,155 @@ tulip_ccrng_fn(int *error)
 	return &tulip_ccrng;
 }
 
+static void
+tulip_digest_init(const struct ccdigest_info *di, ccdigest_ctx_t ctx)
+{
+	ccdigest_nbits(di, ctx) = 0;
+	memcpy(ccdigest_state(di, ctx), di->initial_state, di->state_size);
+	ccdigest_num(di, ctx) = 0;
+}
+
+static void
+tulip_digest_update(const struct ccdigest_info *di, ccdigest_ctx_t ctx, size_t len, const void *data)
+{
+	const uint8_t *p = data;
+	uint8_t *buf = ccdigest_data(di, ctx);
+
+	while (len) {
+		unsigned int num = ccdigest_num(di, ctx);
+		if (num == 0 && len >= di->block_size) {
+			size_t nblocks = len / di->block_size;
+			di->compress(ccdigest_state(di, ctx), nblocks, p);
+			ccdigest_nbits(di, ctx) += (uint64_t)nblocks * di->block_size * 8;
+			p += nblocks * di->block_size;
+			len -= nblocks * di->block_size;
+			continue;
+		}
+		size_t n = di->block_size - num;
+		if (n > len) {
+			n = len;
+		}
+		memcpy(buf + num, p, n);
+		num += (unsigned int)n;
+		p += n;
+		len -= n;
+		if (num == di->block_size) {
+			di->compress(ccdigest_state(di, ctx), 1, buf);
+			ccdigest_nbits(di, ctx) += di->block_size * 8;
+			num = 0;
+		}
+		ccdigest_num(di, ctx) = num;
+	}
+}
+
+static const uint32_t sha256_k[64] = {
+	0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+	0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+	0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+	0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+	0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+	0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+	0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+	0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
+};
+
+static const uint32_t sha256_initial[8] = {
+	0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
+};
+
+static uint32_t
+ror32(uint32_t x, int k)
+{
+	return (x >> k) | (x << (32 - k));
+}
+
+static void
+sha256_compress(ccdigest_state_t state, size_t nblocks, const void *data)
+{
+	uint32_t *h = (uint32_t *)state;
+	const uint8_t *p = data;
+
+	while (nblocks--) {
+		uint32_t w[64], a, b, c, d, e, f, g, hh;
+
+		for (int i = 0; i < 16; i++) {
+			w[i] = ((uint32_t)p[4 * i] << 24) | ((uint32_t)p[4 * i + 1] << 16) |
+			    ((uint32_t)p[4 * i + 2] << 8) | p[4 * i + 3];
+		}
+		for (int i = 16; i < 64; i++) {
+			uint32_t s0 = ror32(w[i - 15], 7) ^ ror32(w[i - 15], 18) ^ (w[i - 15] >> 3);
+			uint32_t s1 = ror32(w[i - 2], 17) ^ ror32(w[i - 2], 19) ^ (w[i - 2] >> 10);
+			w[i] = w[i - 16] + s0 + w[i - 7] + s1;
+		}
+		a = h[0]; b = h[1]; c = h[2]; d = h[3]; e = h[4]; f = h[5]; g = h[6]; hh = h[7];
+		for (int i = 0; i < 64; i++) {
+			uint32_t t1 = hh + (ror32(e, 6) ^ ror32(e, 11) ^ ror32(e, 25)) + ((e & f) ^ (~e & g)) + sha256_k[i] + w[i];
+			uint32_t t2 = (ror32(a, 2) ^ ror32(a, 13) ^ ror32(a, 22)) + ((a & b) ^ (a & c) ^ (b & c));
+			hh = g; g = f; f = e; e = d + t1; d = c; c = b; b = a; a = t1 + t2;
+		}
+		h[0] += a; h[1] += b; h[2] += c; h[3] += d; h[4] += e; h[5] += f; h[6] += g; h[7] += hh;
+		p += 64;
+	}
+}
+
+static void
+sha256_final(const struct ccdigest_info *di, ccdigest_ctx_t ctx, unsigned char *digest)
+{
+	uint8_t *buf = ccdigest_data(di, ctx);
+	unsigned int num = ccdigest_num(di, ctx);
+	uint64_t bits = ccdigest_nbits(di, ctx) + (uint64_t)num * 8;
+	uint32_t *h = (uint32_t *)ccdigest_state(di, ctx);
+
+	buf[num++] = 0x80;
+	if (num > 56) {
+		memset(buf + num, 0, 64 - num);
+		sha256_compress(ccdigest_state(di, ctx), 1, buf);
+		num = 0;
+	}
+	memset(buf + num, 0, 56 - num);
+	for (int i = 0; i < 8; i++) {
+		buf[56 + i] = (uint8_t)(bits >> (56 - 8 * i));
+	}
+	sha256_compress(ccdigest_state(di, ctx), 1, buf);
+	for (int i = 0; i < 8; i++) {
+		digest[4 * i] = (uint8_t)(h[i] >> 24);
+		digest[4 * i + 1] = (uint8_t)(h[i] >> 16);
+		digest[4 * i + 2] = (uint8_t)(h[i] >> 8);
+		digest[4 * i + 3] = (uint8_t)h[i];
+	}
+}
+
+static const unsigned char sha256_oid[] = { 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x01 };
+
+static const struct ccdigest_info tulip_sha256_di = {
+	.output_size = 32,
+	.state_size = 32,
+	.block_size = 64,
+	.oid_size = sizeof(sha256_oid),
+	.oid = sha256_oid,
+	.initial_state = sha256_initial,
+	.compress = sha256_compress,
+	.final = sha256_final,
+};
+
+static void
+sha256_self_test(void)
+{
+	static const uint8_t expect[32] = {
+		0xba, 0x78, 0x16, 0xbf, 0x8f, 0x01, 0xcf, 0xea, 0x41, 0x41, 0x40, 0xde, 0x5d, 0xae, 0x22, 0x23,
+		0xb0, 0x03, 0x61, 0xa3, 0x96, 0x17, 0x7a, 0x9c, 0xb4, 0x10, 0xff, 0x61, 0xf2, 0x00, 0x15, 0xad,
+	};
+	ccdigest_di_decl(&tulip_sha256_di, ctx);
+	uint8_t out[32];
+
+	tulip_digest_init(&tulip_sha256_di, ctx);
+	tulip_digest_update(&tulip_sha256_di, ctx, 3, "abc");
+	sha256_final(&tulip_sha256_di, ctx, out);
+	if (memcmp(out, expect, 32) != 0) {
+		panic("tulip_crypto: SHA-256 self-test failed");
+	}
+}
+
 static struct crypto_functions tulip_crypto_funcs = {
 	.random_generate_fn = tulip_random_generate,
 	.random_uniform_fn = tulip_random_uniform,
@@ -470,6 +620,9 @@ static struct crypto_functions tulip_crypto_funcs = {
 	.ccaes_cbc_encrypt = &tulip_aes_cbc_enc,
 	.ccaes_cbc_decrypt = &tulip_aes_cbc_dec,
 	.ccrng_fn = tulip_ccrng_fn,
+	.ccdigest_init_fn = tulip_digest_init,
+	.ccdigest_update_fn = tulip_digest_update,
+	.ccsha256_di = &tulip_sha256_di,
 };
 
 void
@@ -477,6 +630,7 @@ tulip_crypto_register(void)
 {
 	aes_tables_init();
 	aes_self_test();
+	sha256_self_test();
 	register_crypto_functions(&tulip_crypto_funcs);
 	register_and_init_prng(&tulip_prng_ctx, &tulip_prng_funcs);
 }
