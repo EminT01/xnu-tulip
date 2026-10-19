@@ -696,7 +696,10 @@ query_trust_cache(
 		return KERN_INVALID_ARGUMENT;
 	}
 
-#if   PMAP_CS_PPL_MONITOR
+#if CONFIG_TULIP
+	(void)query_type;
+	(void)query_token;
+#elif PMAP_CS_PPL_MONITOR
 	ret = ppl_query_trust_cache(query_type, cdhash, query_token);
 #else
 	ret = xnu_query_trust_cache(query_type, cdhash, query_token);
