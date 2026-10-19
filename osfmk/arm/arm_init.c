@@ -30,6 +30,9 @@
  */
 
 #include <debug.h>
+#if CONFIG_TULIP
+#include <pexpert/arm64/tulip_log.h>
+#endif
 #include <mach_ldebug.h>
 #include <mach_kdp.h>
 
@@ -346,6 +349,10 @@ arm_init(
 	DTEntry chosen = NULL;
 	unsigned int dt_entry_size = 0;
 
+#if CONFIG_TULIP
+	tulip_crumb(TULIP_CRUMB_ARM_INIT_TSC, __builtin_arm_rsr64("CNTVCT_EL0"));
+	tulip_crumb(TULIP_CRUMB_ARM_INIT, 0x100);
+#endif
 	arm_setup_pre_sign();
 
 	arm_slide_rebase_and_sign_image();
@@ -514,6 +521,9 @@ arm_init(
 #endif  /* __ARM_PAN_AVAILABLE__ */
 
 	arm_vm_init(xmaxmem, args);
+#if CONFIG_TULIP
+	tulip_crumb(TULIP_CRUMB_ARM_VM_INIT, 0x200);
+#endif
 
 	if (debug_boot_arg) {
 		patch_low_glo();
@@ -527,6 +537,9 @@ arm_init(
 
 	/* Setup debugging output. */
 	const unsigned int serial_exists = serial_init();
+#if CONFIG_TULIP
+	tulip_crumb(TULIP_CRUMB_SERIAL_EXISTS, serial_exists);
+#endif
 	kernel_startup_initialize_upto(STARTUP_SUB_KPRINTF);
 	kprintf("kprintf initialized\n");
 
@@ -581,6 +594,9 @@ arm_init(
 
 	cpu_machine_idle_init(TRUE);
 
+#if CONFIG_TULIP
+	tulip_crumb(TULIP_CRUMB_PE_PLATFORM, 0x300);
+#endif
 	PE_init_platform(TRUE, &BootCpuData);
 
 #if __arm64__

@@ -55,6 +55,9 @@
  */
 
 #include <mach_assert.h>
+#if CONFIG_TULIP
+#include <pexpert/arm64/tulip_log.h>
+#endif
 #include <mach_kdp.h>
 #include <kdp/kdp.h>
 #include <kdp/kdp_core.h>
@@ -969,6 +972,9 @@ panic(const char *str, ...)
 {
 	va_list panic_str_args;
 
+#if CONFIG_TULIP
+	tulip_crumb(TULIP_CRUMB_PANIC, 1);
+#endif
 	va_start(panic_str_args, str);
 	panic_trap_to_debugger(str, &panic_str_args, 0, NULL, 0, NULL, (unsigned long)(char *)__builtin_return_address(0));
 	va_end(panic_str_args);

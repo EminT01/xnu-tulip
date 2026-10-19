@@ -12,6 +12,9 @@
 #include <kern/simple_lock.h>
 #include <os/log_private.h>
 #include <libkern/section_keywords.h>
+#if CONFIG_TULIP
+#include <pexpert/arm64/tulip_log.h>
+#endif
 
 /* Globals */
 typedef void (*PE_kputc_t)(char);
@@ -156,6 +159,9 @@ kprintf(const char *fmt, ...)
 static void
 serial_putc_crlf(char c)
 {
+#if CONFIG_TULIP
+	tulip_log_putc(c);
+#endif
 	if (c == '\n') {
 		uart_putc('\r');
 	}

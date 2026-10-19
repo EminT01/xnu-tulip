@@ -26,6 +26,9 @@
 #include <pexpert/arm/consistent_debug.h>
 #include <pexpert/arm64/board_config.h>
 #include <arm64/proc_reg.h>
+#if CONFIG_TULIP
+#include <pexpert/arm64/tulip_log.h>
+#endif
 #include <pexpert/arm/protos.h>
 #include <kern/sched_prim.h>
 #if HIBERNATION
@@ -793,7 +796,9 @@ tulip_fb_map(void)
 		return false;
 	}
 	tulip_fb_vaddr = ml_io_map_wcomb(v->v_baseAddr, v->v_rowBytes * v->v_height);
+	tulip_crumb(TULIP_CRUMB_FB_MAP_VADDR, tulip_fb_vaddr);
 	if (tulip_fb_vaddr == 0) {
+		tulip_crumb(TULIP_CRUMB_FB_MAP_RESULT, 0);
 		return false;
 	}
 	tulip_fb_stride = (uint32_t)v->v_rowBytes;
@@ -909,7 +914,9 @@ serial_init(void)
 	}
 
 #ifdef TULIP_FB_CONSOLE
+	tulip_crumb(TULIP_CRUMB_SERIAL_INIT, 0x400);
 	if (tulip_fb_map()) {
+		tulip_crumb(TULIP_CRUMB_FB_MAP_RESULT, 1);
 		register_serial_functions(&tulip_fb_serial_functions);
 		uart_initted = 1;
 		return 1;

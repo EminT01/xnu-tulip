@@ -34,6 +34,9 @@
 #include <arm/rtclock.h>
 #include <arm/trap.h> /* for IS_ARM_GDB_TRAP() et al */
 #include <arm64/proc_reg.h>
+#if CONFIG_TULIP
+#include <pexpert/arm64/tulip_log.h>
+#endif
 #include <arm64/machine_machdep.h>
 #include <arm64/monotonic.h>
 #include <arm64/instructions.h>
@@ -613,6 +616,14 @@ sleh_synchronous(arm_context_t *context, uint32_t esr, vm_offset_t far)
 #endif /* CONFIG_XNUPOST */
 
 	ASSERT_CONTEXT_SANITY(context);
+
+#if CONFIG_TULIP
+	if (tulip_crumbs[TULIP_CRUMB_SLEH_ESR] == 0) {
+		tulip_crumb(TULIP_CRUMB_SLEH_ESR, esr);
+		tulip_crumb(TULIP_CRUMB_SLEH_FAR, far);
+		tulip_crumb(TULIP_CRUMB_SLEH_PC, get_saved_state_pc(state));
+	}
+#endif
 
 	task_vtimer_check(thread);
 

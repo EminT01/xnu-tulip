@@ -18,7 +18,8 @@ PRIVATE_KERNELFILES = \
 	H13.h \
 	VMAPPLE.h \
 	BCM2837.h \
-	TULIP.h
+	TULIP.h \
+	tulip_log.h
 
 
 # Headers installed into System.framework/PrivateHeaders (userspace internal SDK only).

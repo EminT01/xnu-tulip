@@ -67,6 +67,9 @@
  */
 
 #include <debug.h>
+#if CONFIG_TULIP
+#include <pexpert/arm64/tulip_log.h>
+#endif
 #include <mach_kdp.h>
 
 #include <mach/boolean.h>
@@ -426,6 +429,9 @@ kernel_bootstrap(void)
 	thread_t        thread;
 	char            namep[16];
 
+#if CONFIG_TULIP
+	tulip_crumb(TULIP_CRUMB_KERN_BOOTSTRAP, 0x900);
+#endif
 	printf("%s\n", version); /* log kernel version */
 
 	scale_setup();

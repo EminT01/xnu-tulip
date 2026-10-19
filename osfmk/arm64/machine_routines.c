@@ -27,6 +27,9 @@
  */
 
 #include <arm64/machine_machdep.h>
+#if CONFIG_TULIP
+#include <pexpert/arm64/tulip_log.h>
+#endif
 #include <arm64/proc_reg.h>
 #include <arm/machine_cpu.h>
 #include <arm/cpu_internal.h>
@@ -476,6 +479,9 @@ user_timebase_type(void)
 void
 machine_startup(__unused boot_args * args)
 {
+#if CONFIG_TULIP
+	tulip_crumb(TULIP_CRUMB_MACHINE_STARTUP, 0xa00);
+#endif
 #if defined(HAS_IPI) && (DEVELOPMENT || DEBUG)
 	if (!PE_parse_boot_argn("fastipi", &gFastIPI, sizeof(gFastIPI))) {
 		gFastIPI = 1;

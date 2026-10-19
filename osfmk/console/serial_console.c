@@ -46,6 +46,9 @@
 #include <kern/cpu_data.h>
 #include <kern/sched_prim.h>
 #include <libkern/section_keywords.h>
+#if CONFIG_TULIP
+#include <pexpert/arm64/tulip_log.h>
+#endif
 
 #if __arm64__
 #include <machine/machine_routines.h>
@@ -245,6 +248,9 @@ get_cons_ops_index(void)
 static inline void
 _cnputc(char c, bool poll)
 {
+#if CONFIG_TULIP
+	tulip_log_putc(c);
+#endif
 	bool in_debugger = (kernel_debugger_entry_count > 0);
 	const uint32_t idx = get_cons_ops_index();
 
