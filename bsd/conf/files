@@ -364,6 +364,7 @@ bsd/pthread/pthread_shims.c		standard
 bsd/pthread/libpthread/kern/pthread_kern_init.c		optional config_tulip
 bsd/pthread/libpthread/kern/pthread_kern_support.c	optional config_tulip
 bsd/pthread/libpthread/kern/pthread_kern_synch.c	optional config_tulip
+bsd/kern/tulip_amfi.c			optional config_tulip
 bsd/pthread/pthread_priority.c		standard
 bsd/pthread/pthread_workqueue.c		standard
 
