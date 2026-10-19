@@ -101,7 +101,11 @@ mockfs_mountroot(mount_t mp, vnode_t rvp, __unused vfs_context_t ctx)
 		/*
 		 * For the moment, we won't try to optimize when mi_phys is true.
 		 */
+#if CONFIG_TULIP
+		if (memdev_info.mi_phys) {
+#else
 		if (!mockfs_mount_data->mockfs_physical_memory) {
+#endif
 			mockfs_mount_data->mockfs_memory_backed = memdev_info.mi_mdev;
 			mockfs_mount_data->mockfs_physical_memory = memdev_info.mi_phys;
 			mockfs_mount_data->mockfs_memdev_base = memdev_info.mi_base;
