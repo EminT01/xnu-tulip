@@ -95,6 +95,7 @@ osfmk/arm64/kpc.c		optional kpc nos_arm_asm nos_arm_closed
 osfmk/arm64/kpc_tulip.c	optional kpc config_tulip
 osfmk/arm64/machine_routines_tulip.c	optional config_tulip
 osfmk/arm64/tulip_log.c	optional config_tulip
+osfmk/arm64/tulip_crypto.c	optional config_tulip
 osfmk/arm64/monotonic_arm64.c optional monotonic
 
 osfmk/arm64/platform_tests.c			optional config_xnupost
