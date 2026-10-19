@@ -1136,6 +1136,10 @@ SYSCTL_PROC(_vm, OID_AUTO, shared_region_control,
     0, 0, rsr_version_sysctl, "I", "");
 #endif /* XNU_TARGET_OS_OSX */
 
+#if CONFIG_TULIP
+static TUNABLE(bool, tulip_execlog, "tulip_execlog", false);
+#endif
+
 /*
  * exec_mach_imgact
  *
@@ -1922,6 +1926,11 @@ cleanup_rosetta_fp:
 	p->p_acflag &= ~AFORK;
 
 	set_proc_name(imgp, p);
+#if CONFIG_TULIP
+	if (tulip_execlog) {
+		kprintf("exec: %s[%d] uid %d\n", p->p_comm, proc_getpid(p), kauth_cred_getuid(kauth_cred_get()));
+	}
+#endif
 
 #if CONFIG_SECLUDED_MEMORY
 	if (secluded_for_apps &&
