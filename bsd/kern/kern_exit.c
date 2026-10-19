@@ -1832,6 +1832,10 @@ proc_handle_critical_exit(proc_t p, int rv)
 	}
 }
 
+#if CONFIG_TULIP
+static TUNABLE(bool, tulip_exitlog, "tulip_exitlog", false);
+#endif
+
 void
 proc_prepareexit(proc_t p, int rv, boolean_t perf_notify)
 {
@@ -1848,6 +1852,15 @@ proc_prepareexit(proc_t p, int rv, boolean_t perf_notify)
 	if (p->p_crash_behavior != 0 || p == initproc) {
 		proc_handle_critical_exit(p, rv);
 	}
+#if CONFIG_TULIP
+	if (tulip_exitlog && (WIFSIGNALED(rv) || p->p_exit_reason != OS_REASON_NULL)) {
+		char *desc = exit_reason_get_string_desc(p->p_exit_reason);
+		kprintf("exit: %s[%d] signal %d status %d reason %d/0x%llx %s\n", p->p_comm, proc_getpid(p),
+		    WTERMSIG(rv), WEXITSTATUS(rv),
+		    p->p_exit_reason ? (int)p->p_exit_reason->osr_namespace : -1,
+		    p->p_exit_reason ? p->p_exit_reason->osr_code : 0ULL, desc ? desc : "");
+	}
+#endif
 
 	/*
 	 * Generate a corefile/crashlog if:
