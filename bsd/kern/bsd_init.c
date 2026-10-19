@@ -923,6 +923,9 @@ bsd_init(void)
 		/* Non MacOS */
 		require_rootauth = TRUE;
 #endif // XNU_TARGET_OS_OSX && defined(__arm64__)
+#if CONFIG_TULIP
+		require_rootauth = FALSE;
+#endif
 
 		if (require_rootauth) {
 			/* enforce sealedness */
