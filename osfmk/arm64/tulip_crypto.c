@@ -10,6 +10,7 @@
 #include <libkern/crypto/rand.h>
 #include <corecrypto/ccmode.h>
 #include <corecrypto/ccmode_impl.h>
+#include <corecrypto/ccrng.h>
 #include <kern/debug.h>
 #include <prng/random.h>
 #include <pexpert/arm64/board_config.h>
@@ -437,6 +438,28 @@ aes_self_test(void)
 	}
 }
 
+extern void read_random(void *buffer, u_int numBytes);
+
+static int
+tulip_ccrng_generate(struct ccrng_state *rng __unused, size_t outlen, void *out)
+{
+	read_random(out, (u_int)outlen);
+	return 0;
+}
+
+static struct ccrng_state tulip_ccrng = {
+	.generate = tulip_ccrng_generate,
+};
+
+static struct ccrng_state *
+tulip_ccrng_fn(int *error)
+{
+	if (error) {
+		*error = 0;
+	}
+	return &tulip_ccrng;
+}
+
 static struct crypto_functions tulip_crypto_funcs = {
 	.random_generate_fn = tulip_random_generate,
 	.random_uniform_fn = tulip_random_uniform,
@@ -446,6 +469,7 @@ static struct crypto_functions tulip_crypto_funcs = {
 	.ccaes_ecb_decrypt = &tulip_aes_ecb_dec,
 	.ccaes_cbc_encrypt = &tulip_aes_cbc_enc,
 	.ccaes_cbc_decrypt = &tulip_aes_cbc_dec,
+	.ccrng_fn = tulip_ccrng_fn,
 };
 
 void
