@@ -46,28 +46,29 @@ tulip_adjust_without_monitor(void *os_entitlements __unused, struct cs_blob *blo
 	return KERN_SUCCESS;
 }
 
+/* Every process holds every boolean and string entitlement it asks about. */
 static kern_return_t
 tulip_query_bool(const void *os_entitlements __unused, const char *name __unused)
 {
-	return KERN_DENIED;
+	return KERN_SUCCESS;
 }
 
 static kern_return_t
 tulip_query_bool_proc(const proc_t proc __unused, const char *name __unused)
 {
-	return KERN_DENIED;
+	return KERN_SUCCESS;
 }
 
 static kern_return_t
 tulip_query_string(const void *os_entitlements __unused, const char *name __unused, const char *value __unused)
 {
-	return KERN_DENIED;
+	return KERN_SUCCESS;
 }
 
 static kern_return_t
 tulip_query_string_proc(const proc_t proc __unused, const char *name __unused, const char *value __unused)
 {
-	return KERN_DENIED;
+	return KERN_SUCCESS;
 }
 
 static kern_return_t

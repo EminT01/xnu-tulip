@@ -1510,7 +1510,13 @@ IOUserClient::copyClientEntitlement( task_t task,
 		&entitlement_object);
 
 	if (ret != KERN_SUCCESS) {
+#if CONFIG_TULIP
+		/* tulip_amfi.c holds no entitlement objects; a boolean entitlement then reads as held. */
+		kOSBooleanTrue->retain();
+		return kOSBooleanTrue;
+#else
 		return NULL;
+#endif
 	}
 	assert(entitlement_object != NULL);
 
