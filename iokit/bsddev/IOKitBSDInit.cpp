@@ -67,6 +67,7 @@ extern dev_t mdevadd(int devid, uint64_t base, unsigned int size, int phys);
 #if CONFIG_TULIP
 extern dev_t tulip_vblk_rootdev(void);
 extern "C" void tulip_emmc_probe(void);
+extern "C" dev_t tulip_emmc_rootdev(void);
 #endif
 extern dev_t mdevlookup(int devid);
 extern void mdevremoveall(void);
@@ -787,6 +788,17 @@ IOFindBSDRoot( char * rootName, unsigned int rootNameSize,
 	}
 
 #if CONFIG_TULIP
+	if (strncmp(rdBootVar, "emmc0", sizeof("emmc0")) == 0) {
+		*root = tulip_emmc_rootdev();
+		if (*root == NODEV) {
+			panic("IOFindBSDRoot: no eMMC partition for rd=emmc0");
+		}
+		OSSafeReleaseNULL(matching);
+		strlcpy(rootName, "emmc0", rootNameSize);
+		IOLog("BSD root: %s, major %d, minor %d\n", rootName, major(*root), minor(*root));
+		*oflags = 0;
+		goto iofrootx;
+	}
 	if (strncmp(rdBootVar, "vblk0", sizeof("vblk0")) == 0) {
 		*root = tulip_vblk_rootdev();
 		if (*root == NODEV) {

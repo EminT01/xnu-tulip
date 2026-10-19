@@ -5,26 +5,40 @@
 
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/buf.h>
+#include <sys/conf.h>
+#include <sys/disk.h>
+#include <sys/uio.h>
 #include <sys/errno.h>
+#include <sys/proc.h>
+#include <miscfs/devfs/devfs.h>
 #include <kern/clock.h>
+#include <kern/locks.h>
 #include <machine/machine_routines.h>
+#include <pexpert/pexpert.h>
 #include <libkern/libkern.h>
 
 extern vm_offset_t ml_io_map(vm_offset_t phys_addr, vm_size_t size);
 extern vm_offset_t ml_static_vtop(vm_offset_t vaddr);
+extern int physio(void (*f_strategy)(buf_t), buf_t bp, dev_t dev, int flags,
+    u_int (*f_minphys)(buf_t), struct uio *uio, int blocksize);
+extern u_int minphys(buf_t bp);
 
 /* Print the SDHCI state ABL left and the GPT partitions, reading only. */
 void tulip_emmc_probe(void);
+/* Return the block dev_t of the eMMC partition named by tulip_emmc_part (default userdata), or NODEV. */
+dev_t tulip_emmc_rootdev(void);
 
 #define SDHC1_HC_BASE           0x0c0c4000UL
 #define SDHC1_CQE_BASE          0x0c0c5000UL
+#define SECTOR                  512
+#define BOUNCE_SIZE             (64 * 1024)
+#define DESC_LEN                (16 * 1024)
+#define NDESC                   (BOUNCE_SIZE / DESC_LEN)
 
 #define SDHCI_BLOCK_SIZE        0x04
-#define SDHCI_BLOCK_COUNT       0x06
 #define SDHCI_ARGUMENT          0x08
 #define SDHCI_TRANSFER_MODE     0x0c
-#define SDHCI_RESPONSE          0x10
-#define SDHCI_BUFFER            0x20
 #define SDHCI_PRESENT_STATE     0x24
 #define SDHCI_HOST_CONTROL      0x28
 #define SDHCI_CLOCK_CONTROL     0x2c
@@ -33,30 +47,60 @@ void tulip_emmc_probe(void);
 #define SDHCI_SIGNAL_ENABLE     0x38
 #define SDHCI_HOST_CONTROL2     0x3c
 #define SDHCI_CAPABILITIES      0x40
+#define SDHCI_ADMA_ERROR        0x54
+#define SDHCI_ADMA_ADDRESS      0x58
 
 #define SDHCI_CMD_INHIBIT       (1u << 0)
 #define SDHCI_DAT_INHIBIT       (1u << 1)
 
 #define SDHCI_INT_CMD_COMPLETE  (1u << 0)
 #define SDHCI_INT_XFER_COMPLETE (1u << 1)
-#define SDHCI_INT_BUF_READ      (1u << 5)
 #define SDHCI_INT_ERROR         (1u << 15)
 
+#define SDHCI_TRNS_DMA          (1u << 0)
 #define SDHCI_TRNS_BLK_CNT_EN   (1u << 1)
+#define SDHCI_TRNS_AUTO_CMD12   (1u << 2)
 #define SDHCI_TRNS_READ         (1u << 4)
+#define SDHCI_TRNS_MULTI        (1u << 5)
 
 #define SDHCI_CMD_RESP_48       0x02
 #define SDHCI_CMD_CRC           0x08
 #define SDHCI_CMD_INDEX         0x10
 #define SDHCI_CMD_DATA          0x20
+#define SDHCI_CTRL_ADMA64       (3u << 3)
 
 #define CQHCI_CFG               0x08
 #define CQHCI_CFG_ENABLE        (1u << 0)
 
 #define MMC_READ_SINGLE_BLOCK   17
+#define MMC_READ_MULTIPLE_BLOCK 18
+
+#define ADMA2_VALID             (1u << 0)
+#define ADMA2_END               (1u << 1)
+#define ADMA2_ACT_TRAN          (2u << 4)
+
+struct adma2_desc {
+	uint16_t attr;
+	uint16_t len;
+	uint32_t addr_lo;
+	uint32_t addr_hi;
+} __attribute__((packed));
+
+static struct {
+	struct adma2_desc desc[NDESC];
+	uint8_t pad[64 - (NDESC * sizeof(struct adma2_desc)) % 64];
+	uint8_t data[BOUNCE_SIZE];
+} emmc_dma __attribute__((aligned(16384)));
 
 static vm_offset_t emmc_hc;
-static vm_offset_t emmc_cqe;
+static bool emmc_ready;
+static bool emmc_probed;
+static uint64_t part_start;
+static uint64_t part_sectors;
+static int emmc_bmajor = -1;
+static int emmc_cmajor = -1;
+static LCK_GRP_DECLARE(emmc_lck_grp, "tulip_emmc");
+static LCK_MTX_DECLARE(emmc_mtx, &emmc_lck_grp);
 
 static uint32_t
 hc_read32(uint32_t off)
@@ -70,55 +114,6 @@ hc_write32(uint32_t off, uint32_t val)
 	*(volatile uint32_t *)(emmc_hc + off) = val;
 }
 
-static bool
-hc_wait(uint32_t mask, bool want_set, const char *what)
-{
-	uint64_t deadline;
-
-	nanoseconds_to_absolutetime(100 * NSEC_PER_MSEC, &deadline);
-	deadline += mach_absolute_time();
-	for (;;) {
-		uint32_t st = (mask == (SDHCI_CMD_INHIBIT | SDHCI_DAT_INHIBIT)) ?
-		    hc_read32(SDHCI_PRESENT_STATE) : hc_read32(SDHCI_INT_STATUS);
-		if (!want_set && !(st & mask)) {
-			return true;
-		}
-		if (want_set && (st & mask)) {
-			return true;
-		}
-		if (want_set && (st & SDHCI_INT_ERROR) && mask != (SDHCI_CMD_INHIBIT | SDHCI_DAT_INHIBIT)) {
-			kprintf("tulip_emmc: %s: error, int_status 0x%08x\n", what, st);
-			return false;
-		}
-		if (mach_absolute_time() > deadline) {
-			kprintf("tulip_emmc: %s: timeout, present 0x%08x int_status 0x%08x\n", what,
-			    hc_read32(SDHCI_PRESENT_STATE), hc_read32(SDHCI_INT_STATUS));
-			return false;
-		}
-	}
-}
-
-struct adma2_desc {
-	uint16_t attr;
-	uint16_t len;
-	uint32_t addr_lo;
-	uint32_t addr_hi;
-} __attribute__((packed));
-
-#define ADMA2_VALID             (1u << 0)
-#define ADMA2_END               (1u << 1)
-#define ADMA2_ACT_TRAN          (2u << 4)
-#define SDHCI_ADMA_ADDRESS      0x58
-#define SDHCI_ADMA_ERROR        0x54
-#define SDHCI_TRNS_DMA          (1u << 0)
-#define SDHCI_CTRL_ADMA64       (3u << 3)
-
-static struct {
-	struct adma2_desc desc[1];
-	uint8_t pad[64 - sizeof(struct adma2_desc)];
-	uint8_t data[512];
-} emmc_dma __attribute__((aligned(64)));
-
 static void
 dcache_clean_inval(const void *va, size_t len)
 {
@@ -128,54 +123,136 @@ dcache_clean_inval(const void *va, size_t len)
 	__asm__ volatile ("dsb sy" ::: "memory");
 }
 
-static int
-emmc_read_block(uint32_t lba, uint8_t *out)
+static bool
+wait_idle(void)
 {
-	uint64_t data_pa = ml_static_vtop((vm_offset_t)emmc_dma.data);
-	uint64_t desc_pa = ml_static_vtop((vm_offset_t)emmc_dma.desc);
+	uint64_t deadline;
 
-	if (!hc_wait(SDHCI_CMD_INHIBIT | SDHCI_DAT_INHIBIT, false, "idle")) {
+	nanoseconds_to_absolutetime(100 * NSEC_PER_MSEC, &deadline);
+	deadline += mach_absolute_time();
+	while (hc_read32(SDHCI_PRESENT_STATE) & (SDHCI_CMD_INHIBIT | SDHCI_DAT_INHIBIT)) {
+		if (mach_absolute_time() > deadline) {
+			printf("tulip_emmc: busy, present 0x%08x\n", hc_read32(SDHCI_PRESENT_STATE));
+			return false;
+		}
+	}
+	return true;
+}
+
+static bool
+wait_int(uint32_t mask, const char *what)
+{
+	uint64_t deadline;
+
+	nanoseconds_to_absolutetime(1000 * NSEC_PER_MSEC, &deadline);
+	deadline += mach_absolute_time();
+	for (;;) {
+		uint32_t st = hc_read32(SDHCI_INT_STATUS);
+		if (st & mask) {
+			return true;
+		}
+		if (st & SDHCI_INT_ERROR) {
+			printf("tulip_emmc: %s: error, int_status 0x%08x adma 0x%08x\n", what, st,
+			    hc_read32(SDHCI_ADMA_ERROR));
+			return false;
+		}
+		if (mach_absolute_time() > deadline) {
+			printf("tulip_emmc: %s: timeout, present 0x%08x int_status 0x%08x\n", what,
+			    hc_read32(SDHCI_PRESENT_STATE), st);
+			return false;
+		}
+	}
+}
+
+static void
+reset_cmd_data(void)
+{
+	uint32_t clk = hc_read32(SDHCI_CLOCK_CONTROL);
+	uint64_t deadline;
+
+	hc_write32(SDHCI_CLOCK_CONTROL, (clk & 0x00ffffffu) | (0x06u << 24));
+	nanoseconds_to_absolutetime(100 * NSEC_PER_MSEC, &deadline);
+	deadline += mach_absolute_time();
+	while ((hc_read32(SDHCI_CLOCK_CONTROL) >> 24) & 0x06) {
+		if (mach_absolute_time() > deadline) {
+			printf("tulip_emmc: CMD/DATA reset timeout\n");
+			return;
+		}
+	}
+}
+
+static bool
+emmc_init(void)
+{
+	if (emmc_ready) {
+		return true;
+	}
+	emmc_hc = ml_io_map(SDHC1_HC_BASE, 0x1000);
+	vm_offset_t cqe = ml_io_map(SDHC1_CQE_BASE, 0x1000);
+	if (!emmc_hc || !cqe) {
+		return false;
+	}
+	uint32_t cqcfg = *(volatile uint32_t *)(cqe + CQHCI_CFG);
+	if (cqcfg & CQHCI_CFG_ENABLE) {
+		*(volatile uint32_t *)(cqe + CQHCI_CFG) = cqcfg & ~CQHCI_CFG_ENABLE;
+	}
+	reset_cmd_data();
+	hc_write32(SDHCI_SIGNAL_ENABLE, 0);
+	hc_write32(SDHCI_INT_ENABLE, 0xffffffff);
+	hc_write32(SDHCI_INT_STATUS, 0xffffffff);
+	emmc_ready = true;
+	return true;
+}
+
+/* Read nblocks (at most BOUNCE_SIZE / SECTOR) into emmc_dma.data with ADMA2. */
+static int
+emmc_read(uint64_t lba, uint32_t nblocks)
+{
+	uint32_t len = nblocks * SECTOR;
+
+	if (!wait_idle()) {
+		reset_cmd_data();
 		return EIO;
 	}
-	emmc_dma.desc[0].attr = ADMA2_VALID | ADMA2_END | ADMA2_ACT_TRAN;
-	emmc_dma.desc[0].len = 512;
-	emmc_dma.desc[0].addr_lo = (uint32_t)data_pa;
-	emmc_dma.desc[0].addr_hi = (uint32_t)(data_pa >> 32);
-	dcache_clean_inval(&emmc_dma, sizeof(emmc_dma));
+	for (int i = 0; i < NDESC; i++) {
+		uint64_t pa = ml_static_vtop((vm_offset_t)emmc_dma.data + (vm_offset_t)i * DESC_LEN);
+		uint32_t chunk = len > (uint32_t)i * DESC_LEN ? MIN(len - (uint32_t)i * DESC_LEN, DESC_LEN) : 0;
+		bool last = chunk == 0 || len <= (uint32_t)(i + 1) * DESC_LEN;
+		emmc_dma.desc[i].attr = (uint16_t)(ADMA2_VALID | ADMA2_ACT_TRAN | (last ? ADMA2_END : 0));
+		emmc_dma.desc[i].len = (uint16_t)chunk;
+		emmc_dma.desc[i].addr_lo = (uint32_t)pa;
+		emmc_dma.desc[i].addr_hi = (uint32_t)(pa >> 32);
+		if (last) {
+			break;
+		}
+	}
+	dcache_clean_inval(&emmc_dma, sizeof(emmc_dma.desc) + sizeof(emmc_dma.pad) + len);
 
+	uint64_t desc_pa = ml_static_vtop((vm_offset_t)emmc_dma.desc);
 	hc_write32(SDHCI_HOST_CONTROL, (hc_read32(SDHCI_HOST_CONTROL) & ~0x18u) | SDHCI_CTRL_ADMA64);
 	hc_write32(SDHCI_ADMA_ADDRESS, (uint32_t)desc_pa);
 	hc_write32(SDHCI_ADMA_ADDRESS + 4, (uint32_t)(desc_pa >> 32));
 	hc_write32(SDHCI_INT_STATUS, 0xffffffff);
-	hc_write32(SDHCI_BLOCK_SIZE, (1u << 16) | 512);
-	hc_write32(SDHCI_ARGUMENT, lba);
-	uint32_t cmd = (MMC_READ_SINGLE_BLOCK << 8) | SDHCI_CMD_DATA | SDHCI_CMD_INDEX |
-	    SDHCI_CMD_CRC | SDHCI_CMD_RESP_48;
-	hc_write32(SDHCI_TRANSFER_MODE, (cmd << 16) | SDHCI_TRNS_READ | SDHCI_TRNS_BLK_CNT_EN | SDHCI_TRNS_DMA);
+	hc_write32(SDHCI_BLOCK_SIZE, (nblocks << 16) | SECTOR);
+	hc_write32(SDHCI_ARGUMENT, (uint32_t)lba);
 
-	if (!hc_wait(SDHCI_INT_CMD_COMPLETE, true, "cmd17")) {
-		return EIO;
+	uint32_t mode = SDHCI_TRNS_READ | SDHCI_TRNS_BLK_CNT_EN | SDHCI_TRNS_DMA;
+	uint32_t index = MMC_READ_SINGLE_BLOCK;
+	if (nblocks > 1) {
+		mode |= SDHCI_TRNS_MULTI | SDHCI_TRNS_AUTO_CMD12;
+		index = MMC_READ_MULTIPLE_BLOCK;
 	}
-	if (!hc_wait(SDHCI_INT_XFER_COMPLETE, true, "dma")) {
-		kprintf("tulip_emmc: adma error 0x%08x desc_pa 0x%llx data_pa 0x%llx\n",
-		    hc_read32(SDHCI_ADMA_ERROR), desc_pa, data_pa);
-		return EIO;
-	}
+	uint32_t cmd = (index << 8) | SDHCI_CMD_DATA | SDHCI_CMD_INDEX | SDHCI_CMD_CRC | SDHCI_CMD_RESP_48;
+	hc_write32(SDHCI_TRANSFER_MODE, (cmd << 16) | mode);
+
+	bool ok = wait_int(SDHCI_INT_CMD_COMPLETE, "command") && wait_int(SDHCI_INT_XFER_COMPLETE, "dma");
 	hc_write32(SDHCI_INT_STATUS, 0xffffffff);
-	dcache_clean_inval(emmc_dma.data, 512);
-	memcpy(out, emmc_dma.data, 512);
-	return 0;
-}
-
-static void
-gpt_name(const uint8_t *utf16, char *out, size_t outlen)
-{
-	size_t i;
-
-	for (i = 0; i + 1 < outlen && i < 36 && utf16[2 * i]; i++) {
-		out[i] = (char)utf16[2 * i];
+	if (!ok) {
+		reset_cmd_data();
+		return EIO;
 	}
-	out[i] = 0;
+	dcache_clean_inval(emmc_dma.data, len);
+	return 0;
 }
 
 static uint64_t
@@ -196,76 +273,242 @@ le32(const uint8_t *p)
 	return v;
 }
 
-void
-tulip_emmc_probe(void)
+static void
+gpt_name(const uint8_t *utf16, char *out, size_t outlen)
 {
-	static uint8_t buf[512];
+	size_t i;
 
-	emmc_hc = ml_io_map(SDHC1_HC_BASE, 0x1000);
-	emmc_cqe = ml_io_map(SDHC1_CQE_BASE, 0x1000);
-
-	uint32_t cqcfg = *(volatile uint32_t *)(emmc_cqe + CQHCI_CFG);
-	kprintf("tulip_emmc: present 0x%08x hostctl 0x%08x clock 0x%08x hostctl2 0x%08x caps 0x%08x cqcfg 0x%08x\n",
-	    hc_read32(SDHCI_PRESENT_STATE), hc_read32(SDHCI_HOST_CONTROL), hc_read32(SDHCI_CLOCK_CONTROL),
-	    hc_read32(SDHCI_HOST_CONTROL2), hc_read32(SDHCI_CAPABILITIES), cqcfg);
-	if (cqcfg & CQHCI_CFG_ENABLE) {
-		*(volatile uint32_t *)(emmc_cqe + CQHCI_CFG) = cqcfg & ~CQHCI_CFG_ENABLE;
-		kprintf("tulip_emmc: CQE was on, now cqcfg 0x%08x\n", *(volatile uint32_t *)(emmc_cqe + CQHCI_CFG));
+	for (i = 0; i + 1 < outlen && i < 36 && utf16[2 * i]; i++) {
+		out[i] = (char)utf16[2 * i];
 	}
+	out[i] = 0;
+}
 
-	uint32_t clk = hc_read32(SDHCI_CLOCK_CONTROL);
-	hc_write32(SDHCI_CLOCK_CONTROL, (clk & 0x00ffffffu) | (0x06u << 24));
-	uint64_t rdl;
-	nanoseconds_to_absolutetime(100 * NSEC_PER_MSEC, &rdl);
-	rdl += mach_absolute_time();
-	while ((hc_read32(SDHCI_CLOCK_CONTROL) >> 24) & 0x06) {
-		if (mach_absolute_time() > rdl) {
-			kprintf("tulip_emmc: CMD/DATA reset timeout\n");
-			break;
-		}
-	}
-	kprintf("tulip_emmc: after reset: present 0x%08x hostctl 0x%08x clock 0x%08x\n",
-	    hc_read32(SDHCI_PRESENT_STATE), hc_read32(SDHCI_HOST_CONTROL), hc_read32(SDHCI_CLOCK_CONTROL));
+/* Walk the GPT. With want == NULL print a few partitions, else look up want. */
+static bool
+gpt_scan(const char *want, uint64_t *first_out, uint64_t *count_out)
+{
+	static uint8_t hdr[SECTOR];
+	static uint8_t ent[SECTOR];
 
-	hc_write32(SDHCI_SIGNAL_ENABLE, 0);
-	hc_write32(SDHCI_INT_ENABLE, 0xffffffff);
-	hc_write32(SDHCI_INT_STATUS, 0xffffffff);
-
-	if (emmc_read_block(1, buf) != 0) {
-		return;
+	if (emmc_read(1, 1) != 0) {
+		return false;
 	}
-	if (memcmp(buf, "EFI PART", 8) != 0) {
-		kprintf("tulip_emmc: LBA 1 is not a GPT header: %02x %02x %02x %02x %02x %02x %02x %02x\n",
-		    buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7]);
-		return;
+	memcpy(hdr, emmc_dma.data, SECTOR);
+	if (memcmp(hdr, "EFI PART", 8) != 0) {
+		printf("tulip_emmc: LBA 1 is not a GPT header\n");
+		return false;
 	}
-	uint64_t entries_lba = le64(buf + 72);
-	uint32_t nentries = le32(buf + 80);
-	uint32_t esize = le32(buf + 84);
-	kprintf("tulip_emmc: GPT: %u entries of %u bytes at LBA %llu, disk last LBA %llu\n",
-	    nentries, esize, entries_lba, le64(buf + 32));
+	uint64_t entries_lba = le64(hdr + 72);
+	uint32_t nentries = le32(hdr + 80);
+	uint32_t esize = le32(hdr + 84);
+	if (!want) {
+		printf("tulip_emmc: GPT: %u entries of %u bytes at LBA %llu, disk last LBA %llu\n",
+		    nentries, esize, entries_lba, le64(hdr + 32));
+	}
 	if (esize != 128 || nentries > 256) {
-		return;
+		return false;
 	}
-
-	unsigned found = 0;
 	for (uint32_t i = 0; i < nentries; i++) {
-		if (i % 4 == 0 && emmc_read_block((uint32_t)(entries_lba + i / 4), buf) != 0) {
-			return;
+		if (i % 4 == 0) {
+			if (emmc_read(entries_lba + i / 4, 1) != 0) {
+				return false;
+			}
+			memcpy(ent, emmc_dma.data, SECTOR);
 		}
-		const uint8_t *e = buf + (i % 4) * 128;
+		const uint8_t *e = ent + (i % 4) * 128;
 		uint64_t first = le64(e + 32), last = le64(e + 40);
+		char name[37];
 		if (first == 0) {
 			continue;
 		}
-		char name[37];
 		gpt_name(e + 56, name, sizeof(name));
-		found++;
-		if (!strcmp(name, "userdata") || !strcmp(name, "cache") || !strcmp(name, "boot") ||
-		    !strcmp(name, "recovery")) {
-			kprintf("tulip_emmc: p%u %s: LBA %llu-%llu (%llu MiB)\n", i + 1, name, first, last,
+		if (want && !strcmp(name, want)) {
+			*first_out = first;
+			*count_out = last - first + 1;
+			return true;
+		}
+		if (!want && (!strcmp(name, "userdata") || !strcmp(name, "cache") || !strcmp(name, "boot"))) {
+			printf("tulip_emmc: p%u %s: LBA %llu-%llu (%llu MiB)\n", i + 1, name, first, last,
 			    (last - first + 1) / 2048);
 		}
 	}
-	kprintf("tulip_emmc: %u partitions\n", found);
+	return false;
+}
+
+void
+tulip_emmc_probe(void)
+{
+	if (!emmc_init()) {
+		return;
+	}
+	printf("tulip_emmc: present 0x%08x hostctl 0x%08x clock 0x%08x hostctl2 0x%08x caps 0x%08x\n",
+	    hc_read32(SDHCI_PRESENT_STATE), hc_read32(SDHCI_HOST_CONTROL), hc_read32(SDHCI_CLOCK_CONTROL),
+	    hc_read32(SDHCI_HOST_CONTROL2), hc_read32(SDHCI_CAPABILITIES));
+	gpt_scan(NULL, NULL, NULL);
+}
+
+static void
+tulip_emmc_strategy(buf_t bp)
+{
+	caddr_t vaddr;
+	uint64_t sector = (uint64_t)buf_blkno(bp);
+	uint32_t count = buf_count(bp);
+	uint32_t done = 0;
+	int error = 0;
+
+	if (!(buf_flags(bp) & B_READ)) {
+		buf_seterror(bp, EROFS);
+		buf_biodone(bp);
+		return;
+	}
+	if (count % SECTOR || sector + count / SECTOR > part_sectors) {
+		buf_seterror(bp, EINVAL);
+		buf_biodone(bp);
+		return;
+	}
+	if (buf_map(bp, &vaddr)) {
+		buf_seterror(bp, EIO);
+		buf_biodone(bp);
+		return;
+	}
+
+	lck_mtx_lock(&emmc_mtx);
+	while (done < count && !error) {
+		uint32_t n = MIN(count - done, (uint32_t)BOUNCE_SIZE);
+		error = emmc_read(part_start + sector + done / SECTOR, n / SECTOR);
+		if (!error) {
+			memcpy(vaddr + done, emmc_dma.data, n);
+		}
+		done += n;
+	}
+	lck_mtx_unlock(&emmc_mtx);
+
+	buf_unmap(bp);
+	if (error) {
+		buf_seterror(bp, error);
+	} else {
+		buf_setresid(bp, 0);
+	}
+	buf_biodone(bp);
+}
+
+static int
+tulip_emmc_open(dev_t dev, int flags, __unused int devtype, __unused struct proc *p)
+{
+	if (minor(dev) != 0 || !part_sectors) {
+		return ENXIO;
+	}
+	return (flags & FWRITE) ? EROFS : 0;
+}
+
+static int
+tulip_emmc_close(__unused dev_t dev, __unused int flags, __unused int devtype, __unused struct proc *p)
+{
+	return 0;
+}
+
+static int
+tulip_emmc_psize(__unused dev_t dev)
+{
+	return part_sectors > INT32_MAX ? INT32_MAX : (int)part_sectors;
+}
+
+static int
+tulip_emmc_ioctl(__unused dev_t dev, u_long cmd, caddr_t data, __unused int flag, __unused struct proc *p)
+{
+	switch (cmd) {
+	case DKIOCGETBLOCKSIZE:
+	case DKIOCGETPHYSICALBLOCKSIZE:
+		*(uint32_t *)data = SECTOR;
+		return 0;
+	case DKIOCSETBLOCKSIZE:
+		return *(uint32_t *)data == SECTOR ? 0 : EINVAL;
+	case DKIOCGETBLOCKCOUNT:
+		*(uint64_t *)data = part_sectors;
+		return 0;
+	case DKIOCISWRITABLE:
+		*(uint32_t *)data = 0;
+		return 0;
+	case DKIOCGETMAXBLOCKCOUNTREAD:
+	case DKIOCGETMAXBLOCKCOUNTWRITE:
+		*(uint64_t *)data = BOUNCE_SIZE / SECTOR;
+		return 0;
+	case DKIOCGETMAXSEGMENTCOUNTREAD:
+	case DKIOCGETMAXSEGMENTCOUNTWRITE:
+		*(uint64_t *)data = 32;
+		return 0;
+	case DKIOCSYNCHRONIZE:
+		return 0;
+	default:
+		return ENOTTY;
+	}
+}
+
+static int
+tulip_emmc_rw(dev_t dev, struct uio *uio, __unused int ioflag)
+{
+	return physio(tulip_emmc_strategy, NULL, dev,
+	           uio_rw(uio) == UIO_READ ? B_READ : B_WRITE, minphys, uio, SECTOR);
+}
+
+static const struct bdevsw tulip_emmc_bdevsw = {
+	.d_open     = tulip_emmc_open,
+	.d_close    = tulip_emmc_close,
+	.d_strategy = tulip_emmc_strategy,
+	.d_ioctl    = tulip_emmc_ioctl,
+	.d_dump     = eno_dump,
+	.d_psize    = tulip_emmc_psize,
+	.d_type     = D_DISK,
+};
+
+static const struct cdevsw tulip_emmc_cdevsw = {
+	.d_open       = tulip_emmc_open,
+	.d_close      = tulip_emmc_close,
+	.d_read       = tulip_emmc_rw,
+	.d_write      = tulip_emmc_rw,
+	.d_ioctl      = tulip_emmc_ioctl,
+	.d_stop       = eno_stop,
+	.d_reset      = eno_reset,
+	.d_ttys       = NULL,
+	.d_select     = eno_select,
+	.d_mmap       = eno_mmap,
+	.d_strategy   = eno_strat,
+	.d_reserved_1 = eno_getc,
+	.d_reserved_2 = eno_putc,
+	.d_type       = D_DISK,
+};
+
+dev_t
+tulip_emmc_rootdev(void)
+{
+	if (!emmc_probed) {
+		char want[37] = "userdata";
+
+		emmc_probed = true;
+		PE_parse_boot_argn("tulip_emmc_part", want, sizeof(want));
+		if (!emmc_init()) {
+			return NODEV;
+		}
+		lck_mtx_lock(&emmc_mtx);
+		bool found = gpt_scan(want, &part_start, &part_sectors);
+		lck_mtx_unlock(&emmc_mtx);
+		if (!found) {
+			printf("tulip_emmc: no partition named %s\n", want);
+			part_sectors = 0;
+			return NODEV;
+		}
+		printf("tulip_emmc: %s at LBA %llu, %llu sectors, read-only\n", want, part_start, part_sectors);
+		emmc_bmajor = bdevsw_add(-1, &tulip_emmc_bdevsw);
+		if (emmc_bmajor < 0) {
+			return NODEV;
+		}
+		emmc_cmajor = cdevsw_add_with_bdev(-1, &tulip_emmc_cdevsw, emmc_bmajor);
+		if (emmc_cmajor < 0) {
+			return NODEV;
+		}
+		devfs_make_node(makedev(emmc_bmajor, 0), DEVFS_BLOCK, UID_ROOT, GID_OPERATOR, 0640, "emmc0");
+		devfs_make_node(makedev(emmc_cmajor, 0), DEVFS_CHAR, UID_ROOT, GID_OPERATOR, 0640, "remmc0");
+	}
+	return part_sectors && emmc_bmajor >= 0 ? makedev(emmc_bmajor, 0) : NODEV;
 }
