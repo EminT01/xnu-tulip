@@ -25,6 +25,9 @@
  *
  * @APPLE_OSREFERENCE_LICENSE_HEADER_END@
  */
+#if CONFIG_TULIP
+#include <pexpert/arm64/board_config.h>
+#endif
 #include <IOKit/IOBSD.h>
 #include <IOKit/IOLib.h>
 #include <IOKit/IOService.h>
@@ -680,6 +683,10 @@ IOFindBSDRoot( char * rootName, unsigned int rootNameSize,
 	static int          mountAttempts = 0;
 
 	int xchar, dchar;
+
+#if CONFIG_TULIP
+	tulip_timer_selftest();
+#endif
 
 	// stall here for anyone matching on the IOBSD resource to finish (filesystems)
 	matching = IOService::serviceMatching(gIOResourcesKey);

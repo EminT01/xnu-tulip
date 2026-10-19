@@ -9,6 +9,7 @@
 #include <machine/atomic.h>
 #include <machine/machine_routines.h>
 #include <pexpert/device_tree.h>
+#include <pexpert/pexpert.h>
 #include <pexpert/arm64/board_config.h>
 
 
@@ -91,6 +92,58 @@ tulip_gic_report(void)
 	    __builtin_arm_rsr64("ICC_HPPIR1_EL1"), __builtin_arm_rsr64("ICC_PMR_EL1"),
 	    __builtin_arm_rsr64("ICC_IGRPEN1_EL1"), __builtin_arm_rsr64("ICC_SRE_EL1"),
 	    gicd_read32(GICD_CTLR));
+}
+#endif
+
+#if TULIP
+void
+tulip_timer_selftest(void)
+{
+	vm_offset_t gicr_pe_base = find_gicr_pe_base();
+	uint64_t freq = gPEClockFrequencyInfo.timebase_frequency_hz;
+	uint64_t old_cval = __builtin_arm_rsr64("CNTV_CVAL_EL0");
+	uint64_t old_ctl = __builtin_arm_rsr64("CNTV_CTL_EL0");
+	boolean_t istate = ml_set_interrupts_enabled(FALSE);
+	uint64_t irqs0 = tulip_irq_count;
+
+	kprintf("timertest: pend 0x%08x en 0x%08x grp 0x%08x gicd_ctlr 0x%x pmr 0x%llx igrpen1 0x%llx sre 0x%llx ctlr 0x%llx\n",
+	    gicr_read32(GICR_ISPENDR0), gicr_read32(GICR_ISENABLER0), gicr_read32(GICR_IGROUPR0),
+	    gicd_read32(GICD_CTLR), __builtin_arm_rsr64("ICC_PMR_EL1"), __builtin_arm_rsr64("ICC_IGRPEN1_EL1"),
+	    __builtin_arm_rsr64("ICC_SRE_EL1"), __builtin_arm_rsr64("ICC_CTLR_EL1"));
+
+	uint64_t gpar;
+	__asm__ volatile ("at s1e1r, %1; isb; mrs %0, PAR_EL1" : "=r"(gpar) : "r"(gicr_pe_base));
+	kprintf("timertest: PAR for gicr 0x%llx (attr 0x%02llx)\n", gpar, gpar >> 56);
+	kprintf("timertest: frame 0x%lx typer 0x%llx waker 0x%x mpidr 0x%llx\n",
+	    (unsigned long)(gicr_pe_base - gicr_base), gicr_read64(GICR_TYPER), gicr_read32(GICR_WAKER),
+	    __builtin_arm_rsr64("MPIDR_EL1"));
+	gicr_write32(GICR_ISENABLER0, 1u << TULIP_VTIMER_INTID);
+	__builtin_arm_dsb(DSB_SY);
+	kprintf("timertest: after enable: en 0x%08x\n", gicr_read32(GICR_ISENABLER0));
+
+	__builtin_arm_wsr64("CNTV_CVAL_EL0", __builtin_arm_rsr64("CNTVCT_EL0") + freq / 1000);
+	__builtin_arm_wsr64("CNTV_CTL_EL0", 1);
+	__builtin_arm_isb(ISB_SY);
+	uint64_t end = __builtin_arm_rsr64("CNTVCT_EL0") + freq / 500;
+	while (__builtin_arm_rsr64("CNTVCT_EL0") < end) {
+	}
+	kprintf("timertest: masked: cntv_ctl 0x%llx pend 0x%08x hppir1 0x%llx rpr 0x%llx\n",
+	    __builtin_arm_rsr64("CNTV_CTL_EL0"), gicr_read32(GICR_ISPENDR0),
+	    __builtin_arm_rsr64("ICC_HPPIR1_EL1"), __builtin_arm_rsr64("ICC_RPR_EL1"));
+
+	ml_set_interrupts_enabled(TRUE);
+	end = __builtin_arm_rsr64("CNTVCT_EL0") + freq / 500;
+	while (__builtin_arm_rsr64("CNTVCT_EL0") < end) {
+	}
+	ml_set_interrupts_enabled(FALSE);
+	kprintf("timertest: unmasked: irqs %llu (+%llu) last %u cntv_ctl 0x%llx pend 0x%08x\n",
+	    tulip_irq_count, tulip_irq_count - irqs0, tulip_last_intid,
+	    __builtin_arm_rsr64("CNTV_CTL_EL0"), gicr_read32(GICR_ISPENDR0));
+
+	__builtin_arm_wsr64("CNTV_CVAL_EL0", old_cval);
+	__builtin_arm_wsr64("CNTV_CTL_EL0", old_ctl);
+	__builtin_arm_isb(ISB_SY);
+	ml_set_interrupts_enabled(istate);
 }
 #endif
 

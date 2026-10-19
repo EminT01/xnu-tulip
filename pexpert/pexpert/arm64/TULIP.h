@@ -61,6 +61,7 @@ extern uint32_t tulip_vtimer_intid;
 extern uint64_t tulip_irq_count;
 extern uint32_t tulip_last_intid;
 void tulip_gic_report(void);
+void tulip_timer_selftest(void);
 #ifdef __cplusplus
 }
 #endif
