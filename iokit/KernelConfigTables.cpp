@@ -46,6 +46,11 @@ const char * gIOKernelConfigTables =
     "     'IOProviderClass' = IOPlatformDevice;"
     "     'IONameMatch'     = 'arm,cortex-a73';"
     "   },"
+    "   {"
+    "     'IOClass'         = AppleMobileFileIntegrity;"
+    "     'IOProviderClass' = IOResources;"
+    "     'IOResourceMatch' = IOKit;"
+    "   },"
 #endif
     "   {"
     "     'IOClass'         = IOPanicPlatform;"
