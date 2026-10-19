@@ -12,6 +12,7 @@ Usage:
 """
 import sys
 import os
+sys.path = [p for p in sys.path if os.path.abspath(p or '.') != os.path.dirname(os.path.abspath(__file__))]
 import re
 
 tabs_search_rex = re.compile("^\s*\t+",re.MULTILINE|re.DOTALL)
