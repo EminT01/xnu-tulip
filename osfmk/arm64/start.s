@@ -41,6 +41,27 @@
 #endif
 #include <arm64/exception_asm.h>
 
+#if defined(TULIP)
+/* Paint a 32x32 square at boot framebuffer column \x, MMU off. Clobbers x9-x13. */
+.macro TULIP_EARLY_MARK x, color
+	MOV64	x9, (0x9d400000 + 40 * 4320 + \x * 4)
+	MOV32	w10, \color
+	mov		x11, #32
+Ltulip_mark_row\@:
+	mov		x12, #32
+	mov		x13, x9
+Ltulip_mark_px\@:
+	str		w10, [x13], #4
+	subs	x12, x12, #1
+	b.ne	Ltulip_mark_px\@
+	mov		x12, #4320
+	add		x9, x9, x12
+	subs	x11, x11, #1
+	b.ne	Ltulip_mark_row\@
+	dsb		sy
+.endmacro
+#endif
+
 
 #if __ARM_KERNEL_PROTECT__
 #include <arm/pmap.h>
@@ -465,6 +486,9 @@ LEXT(start_first_cpu)
 	// Unlock the core for debugging
 	msr		OSLAR_EL1, xzr
 	msr		DAIFSet, #(DAIFSC_ALL)				// Disable all interrupts
+#if defined(TULIP)
+	TULIP_EARLY_MARK 100, 0xffff0000
+#endif
 
 	mov		x20, x0
 	mov		x21, #0
@@ -746,6 +770,11 @@ common_start:
 	PAC_INIT_KEY_STATE tmp=x0, tmp2=x1
 #endif /* HAS_APPLE_PAC */
 
+#if defined(TULIP)
+	cbnz	x21, Ltulip_skip_mmu_mark
+	TULIP_EARLY_MARK 160, 0xffffff00
+Ltulip_skip_mmu_mark:
+#endif
 	// Enable caches, MMU, ROP and JOP
 	MOV64   x0, SCTLR_EL1_DEFAULT
 	MSR_SCTLR_EL1_X0
