@@ -213,6 +213,12 @@
 /* D-Cache. */
 #define MMU_CLINE   6
 
+#elif defined (TULIP) /* Cortex-A73 */
+
+#define MMU_I_CLINE 6
+
+#define MMU_CLINE   6
+
 #elif defined (VMAPPLE)
 
 /* I-Cache. */
