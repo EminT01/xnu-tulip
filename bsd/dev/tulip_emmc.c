@@ -109,6 +109,9 @@ static bool emmc_writable;
 static bool emmc_cache_on;
 static uint64_t part_start;
 static uint64_t part_sectors;
+/* Requests read and written, bytes moved and busy time in absolute time units, for tulip_stats. */
+uint64_t tulip_emmc_stats[4];
+
 static int emmc_bmajor = -1;
 static int emmc_cmajor = -1;
 static LCK_GRP_DECLARE(emmc_lck_grp, "tulip_emmc");
@@ -443,6 +446,7 @@ tulip_emmc_strategy(buf_t bp)
 	}
 
 	lck_mtx_lock(&emmc_mtx);
+	uint64_t start = mach_absolute_time();
 	while (done < count && !error) {
 		uint32_t n = MIN(count - done, (uint32_t)BOUNCE_SIZE);
 		uint64_t lba = part_start + sector + done / SECTOR;
@@ -457,6 +461,9 @@ tulip_emmc_strategy(buf_t bp)
 		}
 		done += n;
 	}
+	tulip_emmc_stats[write ? 1 : 0]++;
+	tulip_emmc_stats[2] += done;
+	tulip_emmc_stats[3] += mach_absolute_time() - start;
 	lck_mtx_unlock(&emmc_mtx);
 
 	buf_unmap(bp);
