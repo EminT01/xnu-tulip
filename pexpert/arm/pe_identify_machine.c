@@ -57,9 +57,11 @@ pe_identify_machine(boot_args * bootArgs)
 
 	(void)bootArgs;
 
+#if !CONFIG_TULIP
 	if (pe_arm_get_soc_base_phys() == 0) {
 		return;
 	}
+#endif
 
 	/* Clear the gPEClockFrequencyInfo struct */
 	bzero((void *)&gPEClockFrequencyInfo, sizeof(clock_frequency_info_t));
