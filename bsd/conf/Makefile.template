@@ -75,6 +75,22 @@ COMP_SUBDIRS =
 
 %MACHDEP
 
+TULIP_PTHREAD_INCFLAGS = -I$(SRCROOT)/bsd/pthread/libpthread -I$(SRCROOT)/bsd/pthread/libpthread/private -I$(SRCROOT)/bsd/pthread/libpthread/include
+pthread_kern_init.o_INCFLAGS = $(TULIP_PTHREAD_INCFLAGS)
+pthread_kern_support.o_INCFLAGS = $(TULIP_PTHREAD_INCFLAGS)
+pthread_kern_synch.o_INCFLAGS = $(TULIP_PTHREAD_INCFLAGS)
+TULIP_PTHREAD_CFLAGS_RM = -DXNU_KERNEL_PRIVATE -DBSD_KERNEL_PRIVATE
+pthread_kern_init.o_CFLAGS_RM = $(TULIP_PTHREAD_CFLAGS_RM)
+pthread_kern_support.o_CFLAGS_RM = $(TULIP_PTHREAD_CFLAGS_RM)
+pthread_kern_synch.o_CFLAGS_RM = $(TULIP_PTHREAD_CFLAGS_RM)
+pthread_kern_init.o_CWARNFLAGS_ADD += -Wno-error=int-conversion
+pthread_kern_support.o_CWARNFLAGS_ADD += -Wno-error=int-conversion
+pthread_kern_synch.o_CWARNFLAGS_ADD += -Wno-error=int-conversion
+TULIP_PTHREAD_CFLAGS_ADD = -D__PTHREAD_EXPOSE_INTERNALS__ -DABSOLUTETIME_SCALAR_TYPE -DNEEDS_SCHED_CALL_T -DPRIVATE=1
+pthread_kern_init.o_CFLAGS_ADD += $(TULIP_PTHREAD_CFLAGS_ADD)
+pthread_kern_support.o_CFLAGS_ADD += $(TULIP_PTHREAD_CFLAGS_ADD)
+pthread_kern_synch.o_CFLAGS_ADD += $(TULIP_PTHREAD_CFLAGS_ADD)
+
 tcp_cubic.o_CWARNFLAGS_ADD += -Wno-error=implicit-int-float-conversion
 
 #

@@ -311,9 +311,18 @@ psynch_wait_wakeup(uintptr_t kwq, struct ksyn_waitq_element *kwe,
 
 /* kernel (core) to kext shims */
 
+#if CONFIG_TULIP
+extern kern_return_t pthread_start(void *ki, void *d);
+#endif
+
 void
 pthread_init(void)
 {
+#if CONFIG_TULIP
+	if (!pthread_functions) {
+		pthread_start(NULL, NULL);
+	}
+#endif
 	if (!pthread_functions) {
 		panic("pthread kernel extension not loaded (function table is NULL).");
 	}
