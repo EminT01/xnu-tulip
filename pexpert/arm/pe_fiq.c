@@ -97,6 +97,15 @@ tulip_gic_report(void)
 
 #if TULIP
 void
+tulip_gic_enable_vtimer(void)
+{
+	vm_offset_t gicr_pe_base = find_gicr_pe_base();
+
+	gicr_write32(GICR_ISENABLER0, 1u << TULIP_VTIMER_INTID);
+	__builtin_arm_dsb(DSB_SY);
+}
+
+void
 tulip_timer_selftest(void)
 {
 	vm_offset_t gicr_pe_base = find_gicr_pe_base();
@@ -117,8 +126,7 @@ tulip_timer_selftest(void)
 	kprintf("timertest: frame 0x%lx typer 0x%llx waker 0x%x mpidr 0x%llx\n",
 	    (unsigned long)(gicr_pe_base - gicr_base), gicr_read64(GICR_TYPER), gicr_read32(GICR_WAKER),
 	    __builtin_arm_rsr64("MPIDR_EL1"));
-	gicr_write32(GICR_ISENABLER0, 1u << TULIP_VTIMER_INTID);
-	__builtin_arm_dsb(DSB_SY);
+	tulip_gic_enable_vtimer();
 	kprintf("timertest: after enable: en 0x%08x\n", gicr_read32(GICR_ISENABLER0));
 
 	__builtin_arm_wsr64("CNTV_CVAL_EL0", __builtin_arm_rsr64("CNTVCT_EL0") + freq / 1000);

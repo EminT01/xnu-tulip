@@ -685,7 +685,10 @@ IOFindBSDRoot( char * rootName, unsigned int rootNameSize,
 	int xchar, dchar;
 
 #if CONFIG_TULIP
-	tulip_timer_selftest();
+	uint32_t timertest = 0;
+	if (PE_parse_boot_argn("tulip_timertest", &timertest, sizeof(timertest)) && timertest) {
+		tulip_timer_selftest();
+	}
 #endif
 
 	// stall here for anyone matching on the IOBSD resource to finish (filesystems)
