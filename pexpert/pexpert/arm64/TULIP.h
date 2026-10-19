@@ -35,6 +35,7 @@
 #define GICD_CTLR_NS_ENABLEGRP1   0x1
 #define GICD_CTLR_NS_ENABLEGRP1A  0x2
 #define GICD_CTLR_ARE_NS          0x10
+#define GICD_CTLR_RWP             0x80000000u
 #define GICR_TYPER                0x08
 #define GICR_WAKER                0x14
 #define GICR_IGROUPR0             0x10080

@@ -214,8 +214,20 @@ pe_init_fiq()
 	// Enable the forwarding of the vtimer interrupt
 	uint32_t gicd_ctlr = gicd_read32(GICD_CTLR);
 #if TULIP
+	// ARE_NS may only change while the groups are disabled; the boot loader may have run without it.
+	if (!(gicd_ctlr & GICD_CTLR_ARE_NS)) {
+		gicd_write32(GICD_CTLR, 0);
+		while (gicd_read32(GICD_CTLR) & GICD_CTLR_RWP) {
+		}
+		gicd_write32(GICD_CTLR, GICD_CTLR_ARE_NS);
+		while (gicd_read32(GICD_CTLR) & GICD_CTLR_RWP) {
+		}
+		gicd_ctlr = GICD_CTLR_ARE_NS;
+	}
 	gicd_ctlr |= GICD_CTLR_ARE_NS | GICD_CTLR_NS_ENABLEGRP1A | GICD_CTLR_NS_ENABLEGRP1;
 	gicd_write32(GICD_CTLR, gicd_ctlr);
+	while (gicd_read32(GICD_CTLR) & GICD_CTLR_RWP) {
+	}
 	__builtin_arm_wsr64("ICC_IGRPEN1_EL1", 1);
 #else
 	gicd_ctlr |= GICD_CTLR_ENABLEGRP0;
