@@ -1859,7 +1859,12 @@ arm_vm_init(uint64_t memory_size, boot_args * args)
 	}
 
 #if defined(ARM_LARGE_MEMORY)
-	unsigned long physmap_l1_entries = ((real_phys_size + ARM64_PHYSMAP_SLIDE_RANGE) >> ARM_TT_L1_SHIFT) + 1;
+#if CONFIG_TULIP
+	const vm_size_t physmap_pad = PTOV_TABLE_SIZE * ARM_TT_TWIG_SIZE;
+#else
+	const vm_size_t physmap_pad = 0;
+#endif
+	unsigned long physmap_l1_entries = ((real_phys_size + ARM64_PHYSMAP_SLIDE_RANGE + physmap_pad) >> ARM_TT_L1_SHIFT) + 1;
 	physmap_base = VM_MIN_KERNEL_ADDRESS - (physmap_l1_entries << ARM_TT_L1_SHIFT);
 #else
 	physmap_base = phystokv(args->topOfKernelData);
@@ -1883,7 +1888,7 @@ arm_vm_init(uint64_t memory_size, boot_args * args)
 #if defined(ARM_LARGE_MEMORY)
 	/* For large memory systems with no PPL such as virtual machines */
 	static_memory_end = phystokv(args->topOfKernelData);
-	physmap_end = physmap_base + real_phys_size;
+	physmap_end = physmap_base + real_phys_size + physmap_pad;
 #else
 	static_memory_end = physmap_base + mem_size + (PTOV_TABLE_SIZE * ARM_TT_TWIG_SIZE); // worst possible case for block alignment
 	physmap_end = physmap_base + real_phys_size + (PTOV_TABLE_SIZE * ARM_TT_TWIG_SIZE);
