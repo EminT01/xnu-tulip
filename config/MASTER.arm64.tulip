@@ -20,7 +20,7 @@
 #  KERNEL_RELEASE = [ KERNEL_BASE ]
 #  KERNEL_DEV =     [ KERNEL_BASE development mach_assert config_xnupost proc_ref_debug config_proc_resource_limits ]
 #  KERNEL_DEBUG =   [ KERNEL_BASE debug mach_assert config_xnupost config_waitq_stats config_workloop_debug config_proc_resource_limits ]
-#  BSD_BASE =       [ mach_bsd sysv_sem sysv_msg sysv_shm config_netboot config_imageboot psynch config_proc_uuid_policy config_coredump pgo config_personas ]
+#  BSD_BASE =       [ mach_bsd mockfs sysv_sem sysv_msg sysv_shm config_netboot config_imageboot psynch config_proc_uuid_policy config_coredump pgo config_personas ]
 #  BSD_RELEASE =    [ BSD_BASE ]
 #  BSD_DEV =        [ BSD_BASE config_vnguard ]
 #  BSD_DEBUG =      [ BSD_BASE config_vnguard ]
