@@ -4719,6 +4719,10 @@ ubc_cs_blob_add(
 
 	tmp_blob.csb_flags = cs_flags;
 	tmp_blob.csb_signer_type = signer_type;
+#if CONFIG_TULIP
+	/* There is no AMFI policy to vouch for Apple's signatures, so every signature counts as one. */
+	tmp_blob.csb_flags |= CS_SIGNED | CS_PLATFORM_BINARY;
+#endif
 
 	if (tmp_blob.csb_flags & CS_PLATFORM_BINARY) {
 		tmp_blob.csb_platform_binary = 1;
