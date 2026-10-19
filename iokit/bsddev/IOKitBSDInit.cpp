@@ -66,6 +66,7 @@ extern "C" {
 extern dev_t mdevadd(int devid, uint64_t base, unsigned int size, int phys);
 #if CONFIG_TULIP
 extern dev_t tulip_vblk_rootdev(void);
+extern "C" void tulip_emmc_probe(void);
 #endif
 extern dev_t mdevlookup(int devid);
 extern void mdevremoveall(void);
@@ -685,6 +686,10 @@ IOFindBSDRoot( char * rootName, unsigned int rootNameSize,
 	int xchar, dchar;
 
 #if CONFIG_TULIP
+	uint32_t emmc_probe = 0;
+	if (PE_parse_boot_argn("tulip_emmc_probe", &emmc_probe, sizeof(emmc_probe)) && emmc_probe) {
+		tulip_emmc_probe();
+	}
 	uint32_t timertest = 0;
 	if (PE_parse_boot_argn("tulip_timertest", &timertest, sizeof(timertest)) && timertest) {
 		tulip_timer_selftest();
