@@ -48,9 +48,12 @@
 #define ICC_CTLR_EOIMODE          0x1
 #define ICC_SRE_SRE               0x1
 
-#define TULIP_VTIMER_INTID        19
+#define TULIP_VTIMER_INTID_DEFAULT 19
 
 #ifndef ASSEMBLER
+#include <stdint.h>
+extern uint32_t tulip_vtimer_intid;
+#define TULIP_VTIMER_INTID        tulip_vtimer_intid
 #define TULIP_FB_CONSOLE
 #define PLATFORM_PANIC_LOG_DISABLED
 #endif

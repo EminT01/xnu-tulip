@@ -17,6 +17,9 @@
 MACHINE_TIMEOUT(gicr_wake_timeout_ns, "gicr-wake-timeout", GICR_WAKE_TIMEOUT_NS, MACHINE_TIMEOUT_UNIT_NSEC, NULL);
 
 static vm_offset_t gicd_base;
+#if TULIP
+uint32_t tulip_vtimer_intid = TULIP_VTIMER_INTID_DEFAULT;
+#endif
 static vm_offset_t gicr_base;
 static vm_offset_t gicr_size;
 
@@ -90,6 +93,15 @@ pe_init_fiq()
 		if (error != kSuccess) {
 			panic("%s: cannot find GIC MMIO regions in DT", __func__);
 		}
+
+#if TULIP
+		void const *intid_prop;
+		unsigned int intid_size;
+		if (SecureDTGetProperty(entry, "vtimer-intid", &intid_prop, &intid_size) == kSuccess &&
+		    intid_size == sizeof(uint32_t)) {
+			tulip_vtimer_intid = *(uint32_t const *)intid_prop;
+		}
+#endif
 
 		// Need at least GICD base, GICD size, GICR base and GICR size
 		if (prop_size < 4 * sizeof(uint64_t)) {
