@@ -50,6 +50,13 @@ const char * gIOKernelConfigTables =
     "     'IOClass'         = AppleMobileFileIntegrity;"
     "     'IOProviderClass' = IOResources;"
     "     'IOResourceMatch' = IOKit;"
+    "     'IOMatchCategory' = AppleMobileFileIntegrity;"
+    "   },"
+    "   {"
+    "     'IOClass'         = AppleKeyStore;"
+    "     'IOProviderClass' = IOResources;"
+    "     'IOResourceMatch' = IOKit;"
+    "     'IOMatchCategory' = AppleKeyStore;"
     "   },"
 #endif
     "   {"
