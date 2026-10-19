@@ -3209,7 +3209,7 @@ IOUserServer::server(ipc_kmsg_t requestkmsg, ipc_kmsg_t * pReply)
 		msgout = (typeof(msgout))ikm_header(replykmsg);
 	}
 
-	IORPC rpc = { .message = msgin, .reply = msgout, .sendSize = msgin->msgh.msgh_size, .replySize = replyAlloc };
+	IORPC rpc = { .message = msgin, .reply = msgout, .sendSize = msgin->msgh.msgh_size, .replySize = replyAlloc, .kernelContent = message };
 
 	if (object) {
 		kern_allocation_name_t prior;
@@ -3358,6 +3358,7 @@ IOUserServerUEXTTrap(OSObject * object, void * p1, void * p2, void * p3, void * 
 	rpc.sendSize  = mach->msgh.msgh_size;
 	rpc.reply     = (IORPCMessageMach *) (p + inSize);
 	rpc.replySize = ((uint32_t) (sizeof(buffer.buffer) - inSize));    // inSize was checked
+	rpc.kernelContent = message;
 
 	message->objects[0] = 0;
 	if ((action = OSDynamicCast(OSAction, object))) {

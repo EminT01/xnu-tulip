@@ -224,6 +224,9 @@ struct IORPC {
 	IORPCMessageMach * reply;
 	uint32_t           sendSize;
 	uint32_t           replySize;
+#ifdef KERNEL
+	IORPCMessage     * kernelContent;
+#endif
 };
 typedef struct IORPC IORPC;
 
