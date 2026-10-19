@@ -7386,7 +7386,7 @@ process_signature(proc_t p, struct image_params *imgp)
 		goto done;
 	}
 
-#if XNU_TARGET_OS_OSX
+#if XNU_TARGET_OS_OSX && !CONFIG_TULIP
 	/* Check for platform passed in spawn attr if iOS binary is being spawned */
 	if (proc_platform(p) == PLATFORM_IOS) {
 		struct _posix_spawnattr *psa = (struct _posix_spawnattr *) imgp->ip_px_sa;
