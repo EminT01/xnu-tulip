@@ -80,7 +80,6 @@ TulipPlatformExpert::start(IOService * provider)
 		chosen->release();
 	}
 	publishResource("IORTC", this);
-	tulip_gic_enable_vtimer();
 
 	uint32_t timertest = 0;
 	if (PE_parse_boot_argn("tulip_timertest", &timertest, sizeof(timertest)) && timertest) {

@@ -143,7 +143,6 @@ TulipCPU::start(IOService *provider)
 void
 TulipCPU::initCPU(bool boot __unused)
 {
-	tulip_gic_enable_vtimer();
 	setCPUState(kIOCPUStateRunning);
 
 	/* The first IPI clears SIGPdisabled, which every CPU starts with. */
