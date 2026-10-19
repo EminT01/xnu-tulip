@@ -66,6 +66,11 @@ endif
 Kasan_EXPORTS := $(SRCROOT)/config/Kasan_enabled.$(KASAN_ARCH_SUFFIX).exports
 endif
 
+# TULIP lacks Apple's closed SoC objects; -sect only skips the check that every export exists.
+ifeq ($(CURRENT_MACHINE_CONFIG),TULIP)
+SYMBOL_SET_FLAGS := -sect
+endif
+
 define symbol_set_template
 $(1)_EXPORTS := $$(addprefix $$(SOURCE)/,$$(filter $(1)%,$$(EXPORTS_FILES)))
 $$(TARGET)/$(1).symbolset: MY_EXPORTS_ARGS := $$(foreach file,$$($(1)_EXPORTS),-export $$(file))
@@ -73,6 +78,7 @@ $$(TARGET)/$(1).symbolset: $$($(1)_EXPORTS) $$(TARGET)/allsymbols $$(KEXT_CREATE
 	@$$(LOG_SYMBOLSET) "$(1)$$(Color0) ($$(ColorLF)$$(CURRENT_ARCH_CONFIG_LC)$$(Color0))"
 	$$(_v)$$(KEXT_CREATE_SYMBOL_SET)			\
 		$$(ARCH_FLAGS_$$(CURRENT_ARCH_CONFIG))	\
+		$$(SYMBOL_SET_FLAGS)			\
 		-import $$(TARGET)/allsymbols		\
 		$$(MY_EXPORTS_ARGS)			\
 		-output $$@ $$(_vstdout)
@@ -120,6 +126,7 @@ $(TARGET)/allsymbols: $(OBJPATH)/$(KERNEL_FILE_NAME)
 check_all_exports: $(TARGET)/allsymbols $(KEXT_CREATE_SYMBOL_SET)
 	$(_v)$(KEXT_CREATE_SYMBOL_SET)					\
 		$(ARCH_FLAGS_$(CURRENT_ARCH_CONFIG))			\
+		$(SYMBOL_SET_FLAGS)					\
 		-import $(TARGET)/allsymbols				\
 		$(foreach symbolset,$(filter-out Private,$(SYMBOL_COMPONENT_LIST)),	\
 			-export $(SOURCE)/$(symbolset).exports		\
@@ -127,6 +134,7 @@ check_all_exports: $(TARGET)/allsymbols $(KEXT_CREATE_SYMBOL_SET)
 		-output /dev/null $(_vstdout)
 	$(_v)$(KEXT_CREATE_SYMBOL_SET)					\
 		$(ARCH_FLAGS_$(CURRENT_ARCH_CONFIG))			\
+		$(SYMBOL_SET_FLAGS)					\
 		-import $(TARGET)/allsymbols				\
 		$(foreach symbolset,$(filter-out Unsupported,$(SYMBOL_COMPONENT_LIST)),	\
 			-export $(SOURCE)/$(symbolset).exports		\
