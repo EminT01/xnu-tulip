@@ -649,11 +649,18 @@
 #define SCTLR_JOP_KEYS_DEFAULT  0
 #endif
 
+#if __ARM_PAN_AVAILABLE__
+#define SCTLR_SPAN_DEFAULT      0
+#else
+/* Without PAN support the kernel never clears PSTATE.PAN, so exceptions must not set it. */
+#define SCTLR_SPAN_DEFAULT      SCTLR_PAN_UNCHANGED
+#endif
+
 #define SCTLR_EL1_DEFAULT \
 	(SCTLR_RESERVED | SCTLR_UCI_ENABLED | SCTLR_nTWE_WFE_ENABLED | SCTLR_DZE_ENABLED | \
 	 SCTLR_I_ENABLED | SCTLR_SED_DISABLED | SCTLR_CP15BEN_ENABLED |                    \
 	 SCTLR_SA0_ENABLED | SCTLR_SA_ENABLED | SCTLR_C_ENABLED | SCTLR_M_ENABLED |        \
-	 SCTLR_CSEH_DEFAULT | SCTLR_DSSBS_DEFAULT |                                        \
+	 SCTLR_CSEH_DEFAULT | SCTLR_DSSBS_DEFAULT | SCTLR_SPAN_DEFAULT |                   \
 	 SCTLR_ROP_KEYS_DEFAULT | SCTLR_JOP_KEYS_DEFAULT)
 
 /*
