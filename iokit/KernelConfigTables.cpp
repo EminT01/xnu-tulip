@@ -34,6 +34,14 @@
 
 const char * gIOKernelConfigTables =
     "("
+#if CONFIG_TULIP
+    "   {"
+    "     'IOClass'         = TulipPlatformExpert;"
+    "     'IOProviderClass' = IOPlatformExpertDevice;"
+    "     'IONameMatch'     = 'xiaomi,tulip';"
+    "     'IOProbeScore'    = 1000:32;"
+    "   },"
+#endif
     "   {"
     "     'IOClass'         = IOPanicPlatform;"
     "     'IOProviderClass' = IOPlatformExpertDevice;"

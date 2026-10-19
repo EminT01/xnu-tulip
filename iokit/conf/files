@@ -79,6 +79,7 @@ iokit/Kernel/IOSubMemoryDescriptor.cpp			optional iokitcpp
 iokit/Kernel/IOGuardPageMemoryDescriptor.cpp		optional iokitcpp
 
 iokit/Kernel/IOPlatformExpert.cpp			optional iokitcpp
+iokit/Kernel/TulipPlatformExpert.cpp			optional iokitcpp config_tulip
 iokit/Kernel/IOPlatformIO.cpp				optional iokitcpp
 
 iokit/Kernel/IOCPU.cpp					optional iokitcpp
