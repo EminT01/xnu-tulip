@@ -9,6 +9,8 @@
 extern "C" {
 #include <machine/machine_routines.h>
 #include <kern/clock.h>
+#include <kern/thread.h>
+#include <pexpert/pexpert.h>
 }
 
 class TulipPlatformExpert : public IODTPlatformExpert
@@ -26,6 +28,16 @@ private:
 };
 
 OSDefineMetaClassAndStructors(TulipPlatformExpert, IODTPlatformExpert);
+
+static void
+tulip_tick_thread(void *arg __unused, wait_result_t wr __unused)
+{
+	for (unsigned int n = 0;; n++) {
+		IODelay(1000000);
+		kprintf("tick %u\n", n);
+		tulip_gic_report();
+	}
+}
 
 long
 TulipPlatformExpert::getGMTTimeOfDay(void)
@@ -65,6 +77,14 @@ TulipPlatformExpert::start(IOService * provider)
 		chosen->release();
 	}
 	publishResource("IORTC", this);
+
+	uint32_t tick = 0;
+	if (PE_parse_boot_argn("tulip_tick", &tick, sizeof(tick)) && tick) {
+		thread_t thread;
+		if (kernel_thread_start(tulip_tick_thread, NULL, &thread) == KERN_SUCCESS) {
+			thread_deallocate(thread);
+		}
+	}
 	registerService();
 	return true;
 }

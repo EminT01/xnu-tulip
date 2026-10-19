@@ -41,6 +41,7 @@
 #define GICR_ISENABLER0           0x10100
 #define GICR_ICENABLER0           0x10180
 #define GICR_IPRIORITYR0          0x10400
+#define GICR_ISPENDR0             0x10200
 #define GICR_TYPER_AFFINITY_VALUE_SHIFT 32
 #define GICR_TYPER_LAST           0x10
 #define GICR_WAKER_PROCESSORSLEEP 0x2
@@ -52,7 +53,16 @@
 
 #ifndef ASSEMBLER
 #include <stdint.h>
+#ifdef __cplusplus
+extern "C" {
+#endif
 extern uint32_t tulip_vtimer_intid;
+extern uint64_t tulip_irq_count;
+extern uint32_t tulip_last_intid;
+void tulip_gic_report(void);
+#ifdef __cplusplus
+}
+#endif
 #define TULIP_VTIMER_INTID        tulip_vtimer_intid
 #define TULIP_FB_CONSOLE
 #define PLATFORM_PANIC_LOG_DISABLED

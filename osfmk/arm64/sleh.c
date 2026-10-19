@@ -1871,6 +1871,8 @@ sleh_irq(arm_saved_state_t *state)
 #if TULIP
 	uint64_t iar = __builtin_arm_rsr64("ICC_IAR1_EL1");
 	uint32_t intid = (uint32_t)(iar & 0xffffff);
+	tulip_irq_count++;
+	tulip_last_intid = intid;
 
 	if (intid == TULIP_VTIMER_INTID) {
 		cdp->cpu_decrementer = -1;

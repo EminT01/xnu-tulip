@@ -19,6 +19,8 @@ MACHINE_TIMEOUT(gicr_wake_timeout_ns, "gicr-wake-timeout", GICR_WAKE_TIMEOUT_NS,
 static vm_offset_t gicd_base;
 #if TULIP
 uint32_t tulip_vtimer_intid = TULIP_VTIMER_INTID_DEFAULT;
+uint64_t tulip_irq_count;
+uint32_t tulip_last_intid;
 #endif
 static vm_offset_t gicr_base;
 static vm_offset_t gicr_size;
@@ -69,6 +71,28 @@ find_gicr_pe_base()
 
 	panic("%s: cannot find GICR base for core %u", __func__, ml_get_cpu_number(phys_id));
 }
+
+#if TULIP
+void
+tulip_gic_report(void)
+{
+	vm_offset_t gicr_pe_base = find_gicr_pe_base();
+	uint32_t id = TULIP_VTIMER_INTID;
+	uint32_t prio = gicr_read32(GICR_IPRIORITYR0 + (id & ~3u)) >> ((id & 3u) * 8);
+	uint64_t cntv_ctl = __builtin_arm_rsr64("CNTV_CTL_EL0");
+	uint64_t cval = __builtin_arm_rsr64("CNTV_CVAL_EL0");
+	uint64_t now = __builtin_arm_rsr64("CNTVCT_EL0");
+
+	kprintf("tick: irqs %llu last %u | cntv_ctl 0x%llx cval-now %lld\n",
+	    tulip_irq_count, tulip_last_intid, cntv_ctl, (long long)(cval - now));
+	kprintf("tick: intid %u pend %u en %u grp %u prio 0x%x | hppir1 0x%llx pmr 0x%llx igrpen1 0x%llx sre 0x%llx gicd_ctlr 0x%x\n",
+	    id, (gicr_read32(GICR_ISPENDR0) >> id) & 1, (gicr_read32(GICR_ISENABLER0) >> id) & 1,
+	    (gicr_read32(GICR_IGROUPR0) >> id) & 1, prio & 0xff,
+	    __builtin_arm_rsr64("ICC_HPPIR1_EL1"), __builtin_arm_rsr64("ICC_PMR_EL1"),
+	    __builtin_arm_rsr64("ICC_IGRPEN1_EL1"), __builtin_arm_rsr64("ICC_SRE_EL1"),
+	    gicd_read32(GICD_CTLR));
+}
+#endif
 
 void
 pe_init_fiq()
