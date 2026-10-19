@@ -9683,6 +9683,47 @@ rename(__unused proc_t p, struct rename_args *uap, __unused int32_t *retval)
 	           AT_FDCWD, uap->to, UIO_USERSPACE, 0);
 }
 
+#if CONFIG_TULIP
+/* RENAME_SWAP as three renames, for file systems without it. Not atomic. */
+static int
+tulip_rename_swap_emulated(vfs_context_t ctx, struct renameatx_np_args *uap)
+{
+	u_int keep = uap->flags & RENAME_NOFOLLOW_ANY;
+	char *from = kalloc_data(MAXPATHLEN, Z_WAITOK | Z_ZERO);
+	char *to = kalloc_data(MAXPATHLEN, Z_WAITOK | Z_ZERO);
+	char *tmp = kalloc_data(MAXPATHLEN, Z_WAITOK | Z_ZERO);
+	size_t len;
+	int error;
+
+	error = copyinstr(uap->from, from, MAXPATHLEN, &len);
+	if (!error) {
+		error = copyinstr(uap->to, to, MAXPATHLEN, &len);
+	}
+	if (!error && snprintf(tmp, MAXPATHLEN, "%s.tulip-swap", to) >= MAXPATHLEN) {
+		error = ENAMETOOLONG;
+	}
+	if (!error) {
+		error = renameat_internal(ctx, uap->tofd, CAST_USER_ADDR_T(to), uap->tofd, CAST_USER_ADDR_T(tmp),
+		    UIO_SYSSPACE, RENAME_EXCL | keep);
+	}
+	if (!error) {
+		error = renameat_internal(ctx, uap->fromfd, CAST_USER_ADDR_T(from), uap->tofd, CAST_USER_ADDR_T(to),
+		    UIO_SYSSPACE, RENAME_EXCL | keep);
+		if (error) {
+			renameat_internal(ctx, uap->tofd, CAST_USER_ADDR_T(tmp), uap->tofd, CAST_USER_ADDR_T(to),
+			    UIO_SYSSPACE, keep);
+		} else {
+			error = renameat_internal(ctx, uap->tofd, CAST_USER_ADDR_T(tmp), uap->fromfd, CAST_USER_ADDR_T(from),
+			    UIO_SYSSPACE, RENAME_EXCL | keep);
+		}
+	}
+	kfree_data(from, MAXPATHLEN);
+	kfree_data(to, MAXPATHLEN);
+	kfree_data(tmp, MAXPATHLEN);
+	return error;
+}
+#endif
+
 int
 renameatx_np(__unused proc_t p, struct renameatx_np_args *uap, __unused int32_t *retval)
 {
@@ -9694,8 +9735,14 @@ renameatx_np(__unused proc_t p, struct renameatx_np_args *uap, __unused int32_t 
 		return EINVAL;
 	}
 
-	return renameat_internal(vfs_context_current(), uap->fromfd, uap->from,
-	           uap->tofd, uap->to, UIO_USERSPACE, uap->flags);
+	int error = renameat_internal(vfs_context_current(), uap->fromfd, uap->from,
+	    uap->tofd, uap->to, UIO_USERSPACE, uap->flags);
+#if CONFIG_TULIP
+	if (error == ENOTSUP && (uap->flags & RENAME_SWAP)) {
+		error = tulip_rename_swap_emulated(vfs_context_current(), uap);
+	}
+#endif
+	return error;
 }
 
 int
