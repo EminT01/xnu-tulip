@@ -1857,7 +1857,27 @@ sleh_irq(arm_saved_state_t *state)
 
 	sleh_interrupt_handler_prologue(state, DBG_INTR_TYPE_OTHER);
 
-#if USE_APPLEARMSMP
+#if TULIP
+	uint64_t iar = __builtin_arm_rsr64("ICC_IAR1_EL1");
+	uint32_t intid = (uint32_t)(iar & 0xffffff);
+
+	if (intid == TULIP_VTIMER_INTID) {
+		cdp->cpu_decrementer = -1;
+		INTERRUPT_MASKED_DEBUG_START(rtclock_intr, DBG_INTR_TYPE_TIMER);
+		rtclock_intr(TRUE);
+		INTERRUPT_MASKED_DEBUG_END();
+	} else if (intid != GIC_SPURIOUS_IRQ && cdp->interrupt_handler != NULL) {
+		cdp->interrupt_handler(cdp->interrupt_target,
+		    cdp->interrupt_refCon,
+		    cdp->interrupt_nub,
+		    intid);
+	}
+
+	if (intid != GIC_SPURIOUS_IRQ) {
+		__builtin_arm_wsr64("ICC_EOIR1_EL1", iar);
+		__builtin_arm_isb(ISB_SY);
+	}
+#elif USE_APPLEARMSMP
 	PE_handle_ext_interrupt();
 #else
 	/* Run the registered interrupt handler. */

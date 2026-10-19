@@ -141,11 +141,20 @@ pe_init_fiq()
 		}
 	}
 
+#if TULIP
+	// Group 0 belongs to the secure world here, so the vtimer is a Group 1 IRQ.
+	gicr_write32(GICR_IGROUPR0, gicr_read32(GICR_IGROUPR0) | (1u << TULIP_VTIMER_INTID));
+	vm_offset_t prio = GICR_IPRIORITYR0 + (TULIP_VTIMER_INTID & ~3u);
+	uint32_t shift = (TULIP_VTIMER_INTID & 3u) * 8;
+	gicr_write32(prio, (gicr_read32(prio) & ~(0xffu << shift)) | (0xa0u << shift));
+	gicr_write32(GICR_ISENABLER0, (1u << TULIP_VTIMER_INTID));
+#else
 	// Configure timers and legacy FIQ to be group 0
 	gicr_write32(GICR_IGROUPR0, 0x81FFFFFF);
 
 	// Enable PPI 27
 	gicr_write32(GICR_ISENABLER0, (1 << 27));
+#endif
 
 	// Enable system register access
 	uint64_t icc_sre = __builtin_arm_rsr64("ICC_SRE_EL1");
@@ -153,8 +162,12 @@ pe_init_fiq()
 	__builtin_arm_wsr64("ICC_SRE_EL1", icc_sre);
 	__builtin_arm_isb(ISB_SY);
 
+#if TULIP
+	__builtin_arm_wsr64("ICC_BPR1_EL1", 0);
+#else
 	// Set priority masks and binary point for group 0
 	__builtin_arm_wsr64("ICC_BPR0_EL1", 0);
+#endif
 	__builtin_arm_wsr64("ICC_PMR_EL1", 0xFF);
 
 	// Set EOI mode of this processor
@@ -164,9 +177,15 @@ pe_init_fiq()
 
 	// Enable the forwarding of the vtimer interrupt
 	uint32_t gicd_ctlr = gicd_read32(GICD_CTLR);
+#if TULIP
+	gicd_ctlr |= GICD_CTLR_ARE_NS | GICD_CTLR_NS_ENABLEGRP1A | GICD_CTLR_NS_ENABLEGRP1;
+	gicd_write32(GICD_CTLR, gicd_ctlr);
+	__builtin_arm_wsr64("ICC_IGRPEN1_EL1", 1);
+#else
 	gicd_ctlr |= GICD_CTLR_ENABLEGRP0;
 	gicd_write32(GICD_CTLR, gicd_ctlr);
 	__builtin_arm_wsr64("ICC_IGRPEN0_EL1", 1);
+#endif
 	__builtin_arm_isb(ISB_SY);
 }
 #else
