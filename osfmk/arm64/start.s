@@ -33,8 +33,14 @@
 #include <mach_assert.h>
 #include <machine/asm.h>
 #include "assym.s"
+#if __has_include(<arm64/tunables/tunables.s>)
 #include <arm64/tunables/tunables.s>
+#else
+.macro APPLY_TUNABLES midr, tmp1, tmp2
+.endmacro
+#endif
 #include <arm64/exception_asm.h>
+
 
 #if __ARM_KERNEL_PROTECT__
 #include <arm/pmap.h>

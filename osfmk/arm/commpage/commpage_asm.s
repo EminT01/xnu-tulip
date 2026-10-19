@@ -251,6 +251,21 @@ _jump_table:				// 32 entry jump table, only 2 are used
  * } osfifoqueuehead;
  */
 
+#if !__ARM_FEATURE_ATOMICS
+/* w10 = 0 if the lock at \lock was taken (value w11), else its current value. Uses w12. */
+.macro PFZ_TRYLOCK_LLSC lock
+1:
+	ldaxr	w10, [\lock]
+	cbnz	w10, 2f
+	stxr	w12, w11, [\lock]
+	cbnz	w12, 1b
+	b		3f
+2:
+	clrex
+3:
+.endm
+#endif
+
 /* Non-preemptible helper routine to FIFO enqueue:
  * int pfz_trylock_and_enqueue(OSFifoQueueHead *__list, void *__new, size_t __offset, uint32_t *lock_addr);
  *
@@ -273,7 +288,11 @@ _pfz_trylock_and_enqueue:
 	mov		w11, #1			 // locked value = w11 = 1
 
 	// Try to grab the lock
+#if __ARM_FEATURE_ATOMICS
 	casa	w10, w11, [x3]	 // Atomic CAS with acquire barrier
+#else
+	PFZ_TRYLOCK_LLSC x3
+#endif
 	cbz		w10, Ltrylock_enqueue_success
 
 	mov		x0, #-1			// Failed
@@ -323,7 +342,11 @@ _pfz_trylock_and_dequeue:
 	mov		w10, wzr		 // unlock value = w10 = 0
 	mov		w11, #1			 // locked value = w11 = 1
 
+#if __ARM_FEATURE_ATOMICS
 	casa	w10, w11, [x2]	 // Atomic CAS with acquire barrier
+#else
+	PFZ_TRYLOCK_LLSC x2
+#endif
 	cbz		w10, Ltrylock_dequeue_success
 
 	mov		x0, #-1			// Failed

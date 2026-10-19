@@ -84,8 +84,11 @@
 
 #include <arm64/proc_reg.h>
 #include <pexpert/arm64/boot.h>
+#if __has_include(<arm64/ppl/sart.h>)
 #include <arm64/ppl/sart.h>
 #include <arm64/ppl/uat.h>
+#define PMAP_HAS_SART_UAT 1
+#endif
 
 #if defined(KERNEL_INTEGRITY_KTRR) || defined(KERNEL_INTEGRITY_CTRR)
 #include <arm64/amcc_rorgn.h>
@@ -2183,6 +2186,7 @@ pmap_bootstrap(
 	/**
 	 * Bootstrap any necessary UAT data structures and values needed from the device tree.
 	 */
+#if PMAP_HAS_SART_UAT
 	uat_bootstrap();
 
 
@@ -2190,6 +2194,7 @@ pmap_bootstrap(
 	 * Bootstrap any necessary SART data structures and values needed from the device tree.
 	 */
 	sart_bootstrap();
+#endif
 
 	/**
 	 * Don't make any assumptions about the alignment of avail_start before this
@@ -4497,10 +4502,14 @@ pmap_switch_internal(
 
 #if __ARM_MIXED_PAGE_SIZE__
 	if (__improbable(do_commpage_flush)) {
+#if __ARM_RANGE_TLBI__
 		const uint64_t commpage_shift = cpu_data_ptr->commpage_page_shift;
 		const uint64_t rtlbi_param = generate_rtlbi_param((ppnum_t)_COMM_PAGE64_NESTING_SIZE >> commpage_shift,
 		    0, _COMM_PAGE64_NESTING_START, commpage_shift);
 		flush_core_tlb_allrange_async(rtlbi_param);
+#else
+		flush_core_tlb_async();
+#endif
 	}
 #endif
 	if (__improbable(do_asid_flush)) {
@@ -4672,12 +4681,12 @@ pmap_page_protect_options_with_flush_range(
 #if XNU_MONITOR
 			if (__improbable(pvh_flags & PVH_FLAG_LOCKDOWN_MASK)) {
 				panic("pmap_page_protect: ppnum 0x%x locked down, cannot be owned by iommu %p, pve_p=%p",
-				    ppnum, ptep_get_iommu(pte_p), pve_p);
+				    ppnum, (void *)pte_p, pve_p);
 			}
 #endif
 			if (remove && (options & PMAP_OPTIONS_COMPRESSOR)) {
 				panic("pmap_page_protect: attempt to compress ppnum 0x%x owned by iommu %p, pve_p=%p",
-				    ppnum, ptep_get_iommu(pte_p), pve_p);
+				    ppnum, (void *)pte_p, pve_p);
 			}
 			goto protect_skip_pve_pass1;
 		}
@@ -5815,6 +5824,8 @@ pmap_construct_pte(
 	pte |= ARM_PTE_AF;
 	return pte;
 }
+
+MARK_AS_PMAP_TEXT static void pmap_phys_write_disable(vm_address_t va);
 
 MARK_AS_PMAP_TEXT kern_return_t
 pmap_enter_options_internal(
@@ -11623,7 +11634,9 @@ pmap_cs_lockdown_pages(vm_address_t kva, vm_size_t size, bool ppl_writable)
 #if XNU_MONITOR
 	pmap_ppl_lockdown_pages(kva, size, PVH_FLAG_LOCKDOWN_CS, ppl_writable);
 #else
-	pmap_ppl_lockdown_pages(kva, size, 0, ppl_writable);
+	(void)kva;
+	(void)size;
+	(void)ppl_writable;
 #endif
 }
 
@@ -11633,7 +11646,9 @@ pmap_cs_unlockdown_pages(vm_address_t kva, vm_size_t size, bool ppl_writable)
 #if XNU_MONITOR
 	pmap_ppl_unlockdown_pages(kva, size, PVH_FLAG_LOCKDOWN_CS, ppl_writable);
 #else
-	pmap_ppl_unlockdown_pages(kva, size, 0, ppl_writable);
+	(void)kva;
+	(void)size;
+	(void)ppl_writable;
 #endif
 }
 
