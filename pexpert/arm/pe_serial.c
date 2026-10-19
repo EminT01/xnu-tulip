@@ -679,6 +679,145 @@ SECURITY_READ_ONLY_LATE(static struct pe_serial_functions) vmapple_uart_serial_f
 
 #endif /* VMAPPLE_UART */
 
+#ifdef TULIP_FB_CONSOLE
+
+#include "tulip_fb_font.h"
+
+#define TULIP_FB_SCALE    2
+#define TULIP_FB_MARGIN_X 32
+#define TULIP_FB_MARGIN_Y 112
+#define TULIP_FB_CELL_W   (FONT_W * TULIP_FB_SCALE)
+#define TULIP_FB_CELL_H   (FONT_H * TULIP_FB_SCALE)
+#define TULIP_FB_FG       0xffe0e0e0u
+#define TULIP_FB_BG       0xff000000u
+
+static vm_offset_t tulip_fb_vaddr;
+static uint32_t tulip_fb_stride, tulip_fb_cols, tulip_fb_rows;
+static uint32_t tulip_fb_col, tulip_fb_row;
+
+static inline volatile uint32_t *
+tulip_fb_pixel(uint32_t x, uint32_t y)
+{
+	return (volatile uint32_t *)(tulip_fb_vaddr + (vm_offset_t)y * tulip_fb_stride + (vm_offset_t)x * 4);
+}
+
+static void
+tulip_fb_clear_row(uint32_t row)
+{
+	uint32_t y0 = TULIP_FB_MARGIN_Y + row * TULIP_FB_CELL_H;
+	uint32_t width = tulip_fb_cols * TULIP_FB_CELL_W;
+	for (uint32_t y = y0; y < y0 + TULIP_FB_CELL_H; y++) {
+		for (uint32_t x = TULIP_FB_MARGIN_X; x < TULIP_FB_MARGIN_X + width; x++) {
+			*tulip_fb_pixel(x, y) = TULIP_FB_BG;
+		}
+	}
+}
+
+static void
+tulip_fb_newline(void)
+{
+	tulip_fb_col = 0;
+	if (++tulip_fb_row >= tulip_fb_rows) {
+		tulip_fb_row = 0;
+	}
+	tulip_fb_clear_row(tulip_fb_row);
+}
+
+static void
+tulip_fb_draw(uint8_t c)
+{
+	if (c < 32 || c > 126) {
+		c = '?';
+	}
+	const unsigned short *g = font_glyphs[c - 32];
+	uint32_t x0 = TULIP_FB_MARGIN_X + tulip_fb_col * TULIP_FB_CELL_W;
+	uint32_t y0 = TULIP_FB_MARGIN_Y + tulip_fb_row * TULIP_FB_CELL_H;
+	for (uint32_t gy = 0; gy < FONT_H; gy++) {
+		for (uint32_t gx = 0; gx < FONT_W; gx++) {
+			uint32_t v = ((g[gy] >> (FONT_W - 1 - gx)) & 1) ? TULIP_FB_FG : TULIP_FB_BG;
+			for (uint32_t sy = 0; sy < TULIP_FB_SCALE; sy++) {
+				for (uint32_t sx = 0; sx < TULIP_FB_SCALE; sx++) {
+					*tulip_fb_pixel(x0 + gx * TULIP_FB_SCALE + sx, y0 + gy * TULIP_FB_SCALE + sy) = v;
+				}
+			}
+		}
+	}
+}
+
+static unsigned int
+tulip_fb_transmit_ready(void)
+{
+	return 1;
+}
+
+static void
+tulip_fb_transmit_data(uint8_t c)
+{
+	if (c == '\n') {
+		tulip_fb_newline();
+		return;
+	}
+	if (c == '\r') {
+		tulip_fb_col = 0;
+		return;
+	}
+	tulip_fb_draw(c);
+	if (++tulip_fb_col >= tulip_fb_cols) {
+		tulip_fb_newline();
+	}
+}
+
+static unsigned int
+tulip_fb_receive_ready(void)
+{
+	return 0;
+}
+
+static uint8_t
+tulip_fb_receive_data(void)
+{
+	return 0;
+}
+
+static void
+tulip_fb_init(void)
+{
+}
+
+static bool
+tulip_fb_map(void)
+{
+	PE_Video const *v = &PE_state.video;
+	if (v->v_baseAddr == 0 || v->v_depth != 32 || v->v_width <= 2 * TULIP_FB_MARGIN_X ||
+	    v->v_height <= TULIP_FB_MARGIN_Y + TULIP_FB_CELL_H) {
+		return false;
+	}
+	tulip_fb_vaddr = ml_io_map_wcomb(v->v_baseAddr, v->v_rowBytes * v->v_height);
+	if (tulip_fb_vaddr == 0) {
+		return false;
+	}
+	tulip_fb_stride = (uint32_t)v->v_rowBytes;
+	tulip_fb_cols = (uint32_t)(v->v_width - 2 * TULIP_FB_MARGIN_X) / TULIP_FB_CELL_W;
+	tulip_fb_rows = (uint32_t)(v->v_height - TULIP_FB_MARGIN_Y) / TULIP_FB_CELL_H;
+	tulip_fb_col = 0;
+	tulip_fb_row = 0;
+	tulip_fb_clear_row(0);
+	return true;
+}
+
+SECURITY_READ_ONLY_LATE(static struct pe_serial_functions) tulip_fb_serial_functions =
+{
+	.init = tulip_fb_init,
+	.transmit_ready = tulip_fb_transmit_ready,
+	.transmit_data = tulip_fb_transmit_data,
+	.receive_ready = tulip_fb_receive_ready,
+	.receive_data = tulip_fb_receive_data,
+	.device = SERIAL_TULIP_FB
+};
+
+#endif /* TULIP_FB_CONSOLE */
+
+
 /*****************************************************************************/
 
 /**
@@ -768,6 +907,14 @@ serial_init(void)
 
 		return 1;
 	}
+
+#ifdef TULIP_FB_CONSOLE
+	if (tulip_fb_map()) {
+		register_serial_functions(&tulip_fb_serial_functions);
+		uart_initted = 1;
+		return 1;
+	}
+#endif /* TULIP_FB_CONSOLE */
 
 	soc_base = pe_arm_get_soc_base_phys();
 
