@@ -84,6 +84,7 @@ iokit/Kernel/TulipCPU.cpp			optional iokitcpp config_tulip
 iokit/Kernel/TulipAMFI.cpp			optional iokitcpp config_tulip
 iokit/Kernel/TulipKeyStore.cpp			optional iokitcpp config_tulip
 iokit/Kernel/TulipSurface.cpp			optional iokitcpp config_tulip
+iokit/Kernel/TulipFramebuffer.cpp			optional iokitcpp config_tulip
 bsd/hfs/core/hfs_iokit.cpp			optional iokitcpp config_tulip
 iokit/Kernel/IOPlatformIO.cpp				optional iokitcpp
 

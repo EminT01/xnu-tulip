@@ -65,12 +65,13 @@ static uint32_t gSurfaceValuesGen[MAX_SURFACES];
 void
 TulipSurface::free()
 {
-	if (data) {
+	if (data && wired) {
 		IOLockLock(gSurfaceLock);
 		gSurfaceBytes -= data->getLength();
 		IOLockUnlock(gSurfaceLock);
-		data->release();
 	}
+	OSSafeReleaseNULL(kernelMap);
+	OSSafeReleaseNULL(data);
 	OSSafeReleaseNULL(state);
 	OSObject::free();
 }
@@ -78,7 +79,7 @@ TulipSurface::free()
 uint8_t *
 TulipSurface::pixels() const
 {
-	return (uint8_t *)data->getBytesNoCopy();
+	return kernelMap ? (uint8_t *)kernelMap->getVirtualAddress() : NULL;
 }
 
 TulipSurface *
@@ -146,6 +147,8 @@ row_bytes(uint32_t width, uint8_t elementWidth, uint16_t bytesPerElement)
 	return (div_up(width, elementWidth) * bytesPerElement + ROW_ALIGN - 1) & ~(ROW_ALIGN - 1);
 }
 
+static bool surface_publish(TulipSurface *s);
+
 /* New surface from IOSurfaceCreate properties, in the id table, retained; NULL if it does not fit. */
 static TulipSurface *
 surface_create(OSDictionary *props, uint32_t parentID)
@@ -212,22 +215,35 @@ surface_create(OSDictionary *props, uint32_t parentID)
 		s->release();
 		return NULL;
 	}
-	s->data = IOBufferMemoryDescriptor::inTaskWithOptions(kernel_task,
+	IOBufferMemoryDescriptor *buf = IOBufferMemoryDescriptor::inTaskWithOptions(kernel_task,
 	    kIODirectionInOut | kIOMemoryKernelUserShared, end, PAGE_SIZE);
-	if (!s->data) {
+	if (!buf) {
 		IOLockLock(gSurfaceLock);
 		gSurfaceBytes -= end;
 		IOLockUnlock(gSurfaceLock);
 		s->release();
 		return NULL;
 	}
-	s->state = IOBufferMemoryDescriptor::inTaskWithOptions(kernel_task,
-	    kIODirectionInOut | kIOMemoryKernelUserShared, STATE_SIZE, PAGE_SIZE);
-	if (!s->state) {
+	bzero(buf->getBytesNoCopy(), end);
+	s->data = buf;
+	s->wired = true;
+	s->kernelMap = buf->map();
+	if (!s->kernelMap || !surface_publish(s)) {
 		s->release();
 		return NULL;
 	}
-	bzero(s->data->getBytesNoCopy(), end);
+	return s;
+}
+
+/* Give s a state page and an id in the table; the table keeps a reference. */
+static bool
+surface_publish(TulipSurface *s)
+{
+	s->state = IOBufferMemoryDescriptor::inTaskWithOptions(kernel_task,
+	    kIODirectionInOut | kIOMemoryKernelUserShared, STATE_SIZE, PAGE_SIZE);
+	if (!s->state) {
+		return false;
+	}
 	bzero(s->state->getBytesNoCopy(), STATE_SIZE);
 
 	IOLockLock(gSurfaceLock);
@@ -248,11 +264,47 @@ surface_create(OSDictionary *props, uint32_t parentID)
 		s->retain();
 	}
 	IOLockUnlock(gSurfaceLock);
-	if (!id) {
+	return id != 0;
+}
+
+TulipSurface *
+tulip_surface_create_physical(uint64_t phys, uint32_t width, uint32_t height, uint32_t bytesPerRow,
+    uint32_t pixelFormat)
+{
+	if (!gSurfaceLock) {
+		return NULL;
+	}
+	TulipSurface *s = OSTypeAlloc(TulipSurface);
+	if (!s || !s->init()) {
+		OSSafeReleaseNULL(s);
+		return NULL;
+	}
+	s->width = width;
+	s->height = height;
+	s->bytesPerRow = bytesPerRow;
+	s->bytesPerElement = 4;
+	s->elementWidth = 1;
+	s->elementHeight = 1;
+	s->pixelFormat = pixelFormat;
+	s->allocSize = (uint32_t)round_page((uint64_t)bytesPerRow * height);
+	s->userCache = kIOMapWriteCombineCache;
+	s->data = IOMemoryDescriptor::withPhysicalAddress(phys, s->allocSize, kIODirectionInOut);
+	if (s->data) {
+		s->kernelMap = s->data->map(kIOMapWriteCombineCache);
+	}
+	if (!s->kernelMap || !surface_publish(s)) {
 		s->release();
 		return NULL;
 	}
+	/* Never released: one extra user keeps it in the table. */
+	surface_use(s);
 	return s;
+}
+
+mach_port_name_t
+tulip_surface_port(TulipSurface *surface, task_t task)
+{
+	return iokit_make_send_right(task, surface, IKOT_IOKIT_OBJECT);
 }
 
 /* A surface mapped into one client's task. */
@@ -491,7 +543,7 @@ IOSurfaceRootUserClient::describe(TulipSurface *s, IOExternalMethodArguments *ar
 		ref->surface = s;
 		surface_use(s);
 		ref->count = 1;
-		ref->dataMap = s->data->createMappingInTask(fTask, 0, kIOMapAnywhere);
+		ref->dataMap = s->data->createMappingInTask(fTask, 0, kIOMapAnywhere | s->userCache);
 		ref->stateMap = s->state->createMappingInTask(fTask, 0, kIOMapAnywhere);
 		if (!ref->dataMap || !ref->stateMap) {
 			ref->release();
@@ -770,7 +822,7 @@ IOSurfaceRootUserClient::externalMethod(uint32_t selector, IOExternalMethodArgum
 		if (!s) {
 			return kIOReturnNotFound;
 		}
-		args->scalarOutput[0] = iokit_make_send_right(fTask, s, IKOT_IOKIT_OBJECT);
+		args->scalarOutput[0] = tulip_surface_port(s, fTask);
 		args->scalarOutputCount = 1;
 		s->release();
 		return kIOReturnSuccess;

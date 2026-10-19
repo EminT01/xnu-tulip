@@ -64,6 +64,11 @@ const char * gIOKernelConfigTables =
     "     'IOResourceMatch' = IOKit;"
     "     'IOMatchCategory' = IOCoreSurfaceRoot;"
     "   },"
+    "   {"
+    "     'IOClass'         = AppleCLCD;"
+    "     'IOProviderClass' = IOPlatformDevice;"
+    "     'IONameMatch'     = 'tulip,display';"
+    "   },"
 #endif
     "   {"
     "     'IOClass'         = IOPanicPlatform;"

@@ -8,6 +8,7 @@
 
 #include <libkern/c++/OSObject.h>
 #include <IOKit/IOBufferMemoryDescriptor.h>
+#include <mach/mach_types.h>
 
 #define TULIP_SURFACE_MAX_PLANES 8
 
@@ -31,7 +32,10 @@ public:
 	uint32_t planeCount;
 	TulipSurfacePlane planes[TULIP_SURFACE_MAX_PLANES];
 
-	IOBufferMemoryDescriptor *data;
+	IOMemoryDescriptor *data;
+	IOMemoryMap *kernelMap;
+	IOOptionBits userCache;
+	bool wired;
 	IOBufferMemoryDescriptor *state;
 
 	virtual bool init() APPLE_KEXT_OVERRIDE { return OSObject::init(); }
@@ -43,5 +47,12 @@ public:
 
 /* The surface with this id, retained, or NULL. */
 TulipSurface *tulip_surface_copy(uint32_t id);
+
+/* Physical memory (the panel) as a surface that stays in the id table; retained, or NULL. */
+TulipSurface *tulip_surface_create_physical(uint64_t phys, uint32_t width, uint32_t height,
+    uint32_t bytesPerRow, uint32_t pixelFormat);
+
+/* A send right for the surface in task, for IOSurfaceLookupFromMachPort. */
+mach_port_name_t tulip_surface_port(TulipSurface *surface, task_t task);
 
 #endif /* _IOKIT_TULIPSURFACE_H */
