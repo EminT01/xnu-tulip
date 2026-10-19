@@ -686,7 +686,7 @@ SECURITY_READ_ONLY_LATE(static struct pe_serial_functions) vmapple_uart_serial_f
 
 #include "tulip_fb_font.h"
 
-#define TULIP_FB_SCALE    2
+#define TULIP_FB_SCALE    1
 #define TULIP_FB_MARGIN_X 32
 #define TULIP_FB_MARGIN_Y 112
 #define TULIP_FB_CELL_W   (FONT_W * TULIP_FB_SCALE)
