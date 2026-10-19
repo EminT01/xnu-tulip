@@ -5126,7 +5126,16 @@ IOService::publishHiddenMedia(IOService * parent)
 	bool                wasHiding;
 
 	iomediaClass = OSMetaClass::getMetaClassWithName(gIOMediaKey);
+#if CONFIG_TULIP
+	if (!iomediaClass) {
+		LOCKWRITENOTIFY();
+		gIOServiceHideIOMedia = false;
+		UNLOCKNOTIFY();
+		return;
+	}
+#else
 	assert(iomediaClass);
+#endif
 
 	LOCKWRITENOTIFY();
 	wasHiding = gIOServiceHideIOMedia;
@@ -5179,7 +5188,13 @@ IOService::setRootMedia(IOService * root)
 	bool unhide;
 
 	ioblockstoragedriverClass = OSMetaClass::getMetaClassWithName(gIOBlockStorageDriverKey);
+#if CONFIG_TULIP
+	if (!ioblockstoragedriverClass) {
+		root = NULL;
+	}
+#else
 	assert(ioblockstoragedriverClass);
+#endif
 
 	while (root) {
 		if (root->metaCast(ioblockstoragedriverClass)) {
