@@ -694,6 +694,44 @@ SECURITY_READ_ONLY_LATE(static struct pe_serial_functions) vmapple_uart_serial_f
 #define TULIP_FB_FG       0xffe0e0e0u
 #define TULIP_FB_BG       0xff000000u
 
+#define TULIP_CONSOLE_NO_OWNER  0xffffffffu
+#define TULIP_CONSOLE_SPIN_NS   (100 * NSEC_PER_MSEC)
+
+static uint32_t tulip_console_owner = TULIP_CONSOLE_NO_OWNER;
+static uint32_t tulip_console_depth;
+
+boolean_t
+tulip_console_lock(void)
+{
+	boolean_t istate = ml_set_interrupts_enabled(FALSE);
+	uint32_t me = cpu_number();
+
+	if (os_atomic_load(&tulip_console_owner, relaxed) == me) {
+		tulip_console_depth++;
+		return istate;
+	}
+	uint64_t deadline;
+	nanoseconds_to_deadline(TULIP_CONSOLE_SPIN_NS, &deadline);
+	while (!os_atomic_cmpxchg(&tulip_console_owner, TULIP_CONSOLE_NO_OWNER, me, acquire)) {
+		/* The owner may be stopped by a panic; take the lock so the panic output gets out. */
+		if (mach_absolute_time() > deadline) {
+			os_atomic_store(&tulip_console_owner, me, acquire);
+			break;
+		}
+	}
+	tulip_console_depth = 1;
+	return istate;
+}
+
+void
+tulip_console_unlock(boolean_t istate)
+{
+	if (--tulip_console_depth == 0) {
+		os_atomic_store(&tulip_console_owner, TULIP_CONSOLE_NO_OWNER, release);
+	}
+	ml_set_interrupts_enabled(istate);
+}
+
 static vm_offset_t tulip_fb_vaddr;
 static uint32_t tulip_fb_stride, tulip_fb_cols, tulip_fb_rows;
 static uint32_t tulip_fb_col, tulip_fb_row;

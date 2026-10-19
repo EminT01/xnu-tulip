@@ -283,10 +283,16 @@ _cnputs(char *c, int size, bool poll)
 
 	assert(c != NULL);
 
+#if CONFIG_TULIP
+	boolean_t con = tulip_console_lock();
+#endif
 	while (size-- > 0) {
 		_cnputc(*c, poll);
 		c++;
 	}
+#if CONFIG_TULIP
+	tulip_console_unlock(con);
+#endif
 }
 
 /**

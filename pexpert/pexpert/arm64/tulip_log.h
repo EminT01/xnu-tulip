@@ -7,6 +7,7 @@
 #define _ARM64_TULIP_LOG_H
 
 #include <stdint.h>
+#include <mach/boolean.h>
 
 __BEGIN_DECLS
 
@@ -16,6 +17,10 @@ extern uint64_t tulip_log_pos;
 
 void tulip_crumb(unsigned int idx, uint64_t val);
 void tulip_log_putc(char c);
+
+/* Serialize console output across CPUs; returns the interrupt state for the unlock. */
+boolean_t tulip_console_lock(void);
+void tulip_console_unlock(boolean_t istate);
 
 /*
  * Crumb indices (tulip_crumbs[]):

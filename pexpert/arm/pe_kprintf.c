@@ -10,6 +10,9 @@
 #include <pexpert/pexpert.h>
 #include <kern/debug.h>
 #include <kern/simple_lock.h>
+#if CONFIG_TULIP
+#include <pexpert/arm64/tulip_log.h>
+#endif
 #include <os/log_private.h>
 #include <libkern/section_keywords.h>
 #if CONFIG_TULIP
@@ -124,7 +127,13 @@ kprintf(const char *fmt, ...)
 			cpu_last_locked = cpu_number();
 		}
 
+#if CONFIG_TULIP
+		boolean_t con = tulip_console_lock();
+#endif
 		_doprnt_log(fmt, &listp, PE_kputc, 16);
+#if CONFIG_TULIP
+		tulip_console_unlock(con);
+#endif
 
 		simple_unlock(&kprintf_lock);
 
