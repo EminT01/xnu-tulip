@@ -259,6 +259,9 @@ extern void arm64_thread_exception_return(void) __dead2;
 void cpu_signal_handler(void);
 extern unsigned int gFastIPI;
 #endif /* defined(HAS_IPI) */
+#if TULIP
+void cpu_signal_handler(void);
+#endif
 
 static arm_saved_state64_t *original_faulting_state = NULL;
 
@@ -1879,6 +1882,13 @@ sleh_irq(arm_saved_state_t *state)
 		INTERRUPT_MASKED_DEBUG_START(rtclock_intr, DBG_INTR_TYPE_TIMER);
 		rtclock_intr(TRUE);
 		INTERRUPT_MASKED_DEBUG_END();
+	} else if (intid == TULIP_IPI_SGI) {
+		__builtin_arm_wsr64("ICC_EOIR1_EL1", iar);
+		__builtin_arm_isb(ISB_SY);
+		iar = GIC_SPURIOUS_IRQ;
+		INTERRUPT_MASKED_DEBUG_START(cpu_signal_handler, DBG_INTR_TYPE_IPI);
+		cpu_signal_handler();
+		INTERRUPT_MASKED_DEBUG_END();
 	} else if (intid != GIC_SPURIOUS_IRQ && cdp->interrupt_handler != NULL) {
 		cdp->interrupt_handler(cdp->interrupt_target,
 		    cdp->interrupt_refCon,
@@ -1886,7 +1896,7 @@ sleh_irq(arm_saved_state_t *state)
 		    intid);
 	}
 
-	if (intid != GIC_SPURIOUS_IRQ) {
+	if (iar != GIC_SPURIOUS_IRQ) {
 		__builtin_arm_wsr64("ICC_EOIR1_EL1", iar);
 		__builtin_arm_isb(ISB_SY);
 	}

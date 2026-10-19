@@ -106,6 +106,18 @@ tulip_gic_enable_vtimer(void)
 }
 
 void
+tulip_gic_send_ipi(uint32_t mpidr)
+{
+	uint64_t sgi1r = ((uint64_t)TULIP_IPI_SGI << 24) |
+	    ((uint64_t)((mpidr >> 8) & 0xff) << 16) |
+	    (1ull << (mpidr & 0xf));
+
+	__builtin_arm_dsb(DSB_ISHST);
+	__builtin_arm_wsr64("ICC_SGI1R_EL1", sgi1r);
+	__builtin_arm_isb(ISB_SY);
+}
+
+void
 tulip_timer_selftest(void)
 {
 	vm_offset_t gicr_pe_base = find_gicr_pe_base();
@@ -251,12 +263,16 @@ pe_init_fiq()
 	}
 
 #if TULIP
-	// Group 0 belongs to the secure world here, so the vtimer is a Group 1 IRQ.
-	gicr_write32(GICR_IGROUPR0, gicr_read32(GICR_IGROUPR0) | (1u << TULIP_VTIMER_INTID));
-	vm_offset_t prio = GICR_IPRIORITYR0 + (TULIP_VTIMER_INTID & ~3u);
-	uint32_t shift = (TULIP_VTIMER_INTID & 3u) * 8;
-	gicr_write32(prio, (gicr_read32(prio) & ~(0xffu << shift)) | (0xa0u << shift));
-	gicr_write32(GICR_ISENABLER0, (1u << TULIP_VTIMER_INTID));
+	// Group 0 belongs to the secure world here, so the vtimer and the IPI are Group 1 IRQs.
+	const uint32_t intids[] = { TULIP_VTIMER_INTID, TULIP_IPI_SGI };
+	for (unsigned int i = 0; i < sizeof(intids) / sizeof(intids[0]); i++) {
+		uint32_t id = intids[i];
+		gicr_write32(GICR_IGROUPR0, gicr_read32(GICR_IGROUPR0) | (1u << id));
+		vm_offset_t prio = GICR_IPRIORITYR0 + (id & ~3u);
+		uint32_t shift = (id & 3u) * 8;
+		gicr_write32(prio, (gicr_read32(prio) & ~(0xffu << shift)) | (0xa0u << shift));
+		gicr_write32(GICR_ISENABLER0, 1u << id);
+	}
 #else
 	// Configure timers and legacy FIQ to be group 0
 	gicr_write32(GICR_IGROUPR0, 0x81FFFFFF);

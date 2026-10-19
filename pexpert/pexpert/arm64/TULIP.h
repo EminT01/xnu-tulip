@@ -51,6 +51,7 @@
 #define ICC_SRE_SRE               0x1
 
 #define TULIP_VTIMER_INTID_DEFAULT 19
+#define TULIP_IPI_SGI             1
 
 #ifndef ASSEMBLER
 #include <stdint.h>
@@ -63,6 +64,7 @@ extern uint32_t tulip_last_intid;
 void tulip_gic_report(void);
 void tulip_timer_selftest(void);
 void tulip_gic_enable_vtimer(void);
+void tulip_gic_send_ipi(uint32_t mpidr);
 #ifdef __cplusplus
 }
 #endif
