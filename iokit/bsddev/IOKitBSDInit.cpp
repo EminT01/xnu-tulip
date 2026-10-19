@@ -683,11 +683,13 @@ IOFindBSDRoot( char * rootName, unsigned int rootNameSize,
 	assert(matching);
 	matching->setObject(gIOResourceMatchedKey, gIOBSDKey);
 
+#if !CONFIG_TULIP
 	if ((service = IOService::waitForMatchingService(matching, 30ULL * kSecondScale))) {
 		OSSafeReleaseNULL(service);
 	} else {
 		IOLog("!BSD\n");
 	}
+#endif
 	matching->release();
 	matching = NULL;
 
