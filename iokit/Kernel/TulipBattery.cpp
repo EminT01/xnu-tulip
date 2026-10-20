@@ -5,9 +5,10 @@
 
 #include <IOKit/IOLib.h>
 #include <IOKit/IOTimerEventSource.h>
+#include <IOKit/IOInterruptEventSource.h>
 #include <IOKit/IOWorkLoop.h>
 #include <IOKit/pwr_mgt/IOPMPowerSource.h>
-#include "TulipSPMI.h"
+#include "TulipSPMIInterrupts.h"
 
 #define CAPACITY_MAH            4000
 #define CUTOFF_MV               3400
@@ -15,6 +16,8 @@
 #define MIN_VALID_MV            2500
 #define WARN_PERCENT            10
 #define POLL_MS                 2000
+/* With interrupts for plug, charger state and charge changes, the timer only refreshes voltage and current. */
+#define INTERRUPT_POLL_MS       30000
 #define REPORT_POLLS            15
 #define MAX_FAILURE_LOGS        10
 
@@ -45,6 +48,12 @@
 #define PON_OFF_FAULT           (1u << 6)
 #define FG_INFO_INT_RT_STS      0x4110
 #define FG_VBATT                0x41a0
+#define CHGR_BASE               0x1000
+#define CHGR_STATE_CHANGE_IRQ   1
+#define USBIN_BASE              0x1300
+#define USBIN_PLUGIN_IRQ        4
+#define FG_SOC_BASE             0x4000
+#define FG_MSOC_DELTA_IRQ       3
 
 #define CHGR_STATE_MASK         0x7
 #define CHGR_STATE_TERMINATE    5
@@ -69,6 +78,9 @@ public:
 private:
 	TulipSPMI fSPMI;
 	IOTimerEventSource *fTimer;
+	IOInterruptEventSource *fInterrupt;
+	IONotifier *fNotifier;
+	volatile bool fInterrupts;
 	unsigned int fPolls;
 	unsigned int fFailures;
 	int32_t fMinMv;
@@ -88,6 +100,8 @@ private:
 	void update();
 
 	static void poll(OSObject *owner, IOTimerEventSource *sender);
+	static void interrupt(OSObject *owner, IOInterruptEventSource *sender, int count);
+	static bool published(void *target, void *refCon, IOService *service, IONotifier *notifier);
 };
 
 OSDefineMetaClassAndStructors(TulipBattery, IOPMPowerSource);
@@ -219,7 +233,7 @@ TulipBattery::update()
 	fMinMv = fMinMv && fMinMv < mv ? fMinMv : mv;
 	fMaxLoadMa = fMaxLoadMa > -ma ? fMaxLoadMa : -ma;
 	bool changed = !fReported || online != fLastOnline || state != fLastState || percent != fLastPercent;
-	if (!changed && ++fPolls < REPORT_POLLS) {
+	if (!changed && !fInterrupts && ++fPolls < REPORT_POLLS) {
 		return;
 	}
 	fPolls = 0;
@@ -263,8 +277,30 @@ TulipBattery::update()
 void
 TulipBattery::poll(OSObject *owner, IOTimerEventSource *sender)
 {
+	TulipBattery *self = (TulipBattery *)owner;
+	self->update();
+	sender->setTimeoutMS(self->fInterrupts ? INTERRUPT_POLL_MS : POLL_MS);
+}
+
+void
+TulipBattery::interrupt(OSObject *owner, IOInterruptEventSource *sender __unused, int count __unused)
+{
 	((TulipBattery *)owner)->update();
-	sender->setTimeoutMS(POLL_MS);
+}
+
+bool
+TulipBattery::published(void *target, void *refCon __unused, IOService *service, IONotifier *notifier)
+{
+	TulipBattery *self = (TulipBattery *)target;
+	TulipSPMIInterrupts *pmic = OSDynamicCast(TulipSPMIInterrupts, service);
+	notifier->remove();
+	if (pmic && pmic->enable(PM660_SID, USBIN_BASE, USBIN_PLUGIN_IRQ, kTulipPMICBoth, self->fInterrupt) &&
+	    pmic->enable(PM660_SID, CHGR_BASE, CHGR_STATE_CHANGE_IRQ, kTulipPMICRising, self->fInterrupt) &&
+	    pmic->enable(PM660_SID, FG_SOC_BASE, FG_MSOC_DELTA_IRQ, kTulipPMICRising, self->fInterrupt)) {
+		self->fInterrupts = true;
+		IOLog("TulipBattery: interrupts\n");
+	}
+	return true;
 }
 
 /* Why the PMIC last powered off or reset, kept across the reset (Linux drivers/input/misc/qpnp-power-on.c, gen2). */
@@ -332,10 +368,14 @@ TulipBattery::start(IOService *provider)
 
 	IOWorkLoop *wl = getWorkLoop();
 	fTimer = IOTimerEventSource::timerEventSource(this, &TulipBattery::poll);
-	if (!wl || !fTimer || wl->addEventSource(fTimer) != kIOReturnSuccess) {
+	fInterrupt = IOInterruptEventSource::interruptEventSource(this, &TulipBattery::interrupt);
+	if (!wl || !fTimer || !fInterrupt || wl->addEventSource(fTimer) != kIOReturnSuccess ||
+	    wl->addEventSource(fInterrupt) != kIOReturnSuccess) {
 		return false;
 	}
 	registerService();
 	fTimer->setTimeoutMS(POLL_MS);
+	fNotifier = addMatchingNotification(gIOFirstPublishNotification, serviceMatching("TulipSPMIInterrupts"),
+	    &TulipBattery::published, this);
 	return true;
 }
