@@ -29,11 +29,9 @@ extern "C" {
 #define NVT_TOUCH_NEW           1
 #define NVT_TOUCH_UPDATE        2
 
-/* Polling without interrupts; with them, a slow poll catches what they miss and ends touches whose release got lost. */
 #define POLL_MS                 8
-#define BACKSTOP_DOWN_MS        30
-#define BACKSTOP_MS             1000
-#define MAX_MISS_LOGS           10
+/* A finger that sees no interrupt for this long is read again, in case its release was lost. */
+#define RELEASE_CHECK_MS        100
 
 class TulipTouch : public IOHIDEventService
 {
@@ -54,7 +52,6 @@ private:
 	IOTimerEventSource *fTimer;
 	IOInterruptEventSource *fInterrupt;
 	uint64_t fInterrupts;
-	uint32_t fMisses;
 	uint32_t fWidth, fHeight;
 	uint32_t fCanvasWidth, fCanvasHeight;
 	int32_t fOutX, fOutY, fOutWidth, fOutHeight;
@@ -155,8 +152,10 @@ TulipTouch::arm()
 {
 	if (!fInterrupt || !fTLMM->interruptsReady()) {
 		fTimer->setTimeoutMS(POLL_MS);
+	} else if (anyDown()) {
+		fTimer->setTimeoutMS(RELEASE_CHECK_MS);
 	} else {
-		fTimer->setTimeoutMS(anyDown() ? BACKSTOP_DOWN_MS : BACKSTOP_MS);
+		fTimer->cancelTimeout();
 	}
 }
 
@@ -252,6 +251,7 @@ TulipTouch::start(IOService *provider)
 	}
 	IOLog("TulipTouch: %s\n", fInterrupt ? "interrupts" : "polling");
 	registerService();
+	readTouches();
 	arm();
 	return true;
 }
@@ -367,10 +367,6 @@ TulipTouch::poll(OSObject *owner, IOTimerEventSource *sender __unused)
 	bool down = self->anyDown();
 
 	if (latched || line || down) {
-		if (interrupts && !down && self->fMisses < MAX_MISS_LOGS) {
-			IOLog("TulipTouch: the poll found a touch that the interrupt missed (%llu interrupts)\n", self->fInterrupts);
-			self->fMisses++;
-		}
 		self->readTouches();
 	}
 	self->arm();
