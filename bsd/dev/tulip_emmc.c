@@ -221,11 +221,15 @@ emmc_init(void)
 	return true;
 }
 
+/* Time spent in each phase of emmc_xfer: setup, command, data, finish. */
+static uint64_t emmc_phase_time[4];
+
 /* Move nblocks (at most BOUNCE_SIZE / SECTOR) between emmc_dma.data and the card with ADMA2. */
 static int
 emmc_xfer(bool write, uint32_t index, uint32_t arg, uint32_t nblocks)
 {
 	uint32_t len = nblocks * SECTOR;
+	uint64_t t0 = mach_absolute_time();
 
 	if (!wait_idle()) {
 		reset_cmd_data();
@@ -259,14 +263,22 @@ emmc_xfer(bool write, uint32_t index, uint32_t arg, uint32_t nblocks)
 	}
 	uint32_t cmd = (index << 8) | SDHCI_CMD_DATA | SDHCI_CMD_INDEX | SDHCI_CMD_CRC | SDHCI_CMD_RESP_48;
 	hc_write32(SDHCI_TRANSFER_MODE, (cmd << 16) | mode);
+	uint64_t t1 = mach_absolute_time();
 
-	bool ok = wait_int(SDHCI_INT_CMD_COMPLETE, "command") && wait_int(SDHCI_INT_XFER_COMPLETE, "dma");
+	bool ok = wait_int(SDHCI_INT_CMD_COMPLETE, "command");
+	uint64_t t2 = mach_absolute_time();
+	ok = ok && wait_int(SDHCI_INT_XFER_COMPLETE, "dma");
+	uint64_t t3 = mach_absolute_time();
 	hc_write32(SDHCI_INT_STATUS, 0xffffffff);
 	if (!ok) {
 		reset_cmd_data();
 		return EIO;
 	}
 	dcache_clean_inval(emmc_dma.data, len);
+	emmc_phase_time[0] += t1 - t0;
+	emmc_phase_time[1] += t2 - t1;
+	emmc_phase_time[2] += t3 - t2;
+	emmc_phase_time[3] += mach_absolute_time() - t3;
 	return 0;
 }
 
@@ -408,6 +420,30 @@ gpt_scan(const char *want, uint64_t *first_out, uint64_t *count_out)
 	return false;
 }
 
+/* Read count transfers of nblocks from the start of userdata and print the time per phase. */
+static void
+emmc_benchmark(uint32_t count, uint32_t nblocks)
+{
+	const uint64_t lba = 14417920;
+	uint64_t ns[4], total;
+
+	bzero(emmc_phase_time, sizeof(emmc_phase_time));
+	uint64_t start = mach_absolute_time();
+	for (uint32_t i = 0; i < count; i++) {
+		if (emmc_read(lba + (uint64_t)i * nblocks, nblocks) != 0) {
+			printf("tulip_emmc: benchmark read %u failed\n", i);
+			return;
+		}
+	}
+	absolutetime_to_nanoseconds(mach_absolute_time() - start, &total);
+	for (int i = 0; i < 4; i++) {
+		absolutetime_to_nanoseconds(emmc_phase_time[i], &ns[i]);
+	}
+	printf("tulip_emmc: %u x %u KiB in %llu ms (%llu KiB/s); per read us: setup %llu, command %llu, data %llu, finish %llu\n",
+	    count, nblocks / 2, total / NSEC_PER_MSEC, (uint64_t)count * nblocks / 2 * NSEC_PER_SEC / MAX(total, 1),
+	    ns[0] / count / 1000, ns[1] / count / 1000, ns[2] / count / 1000, ns[3] / count / 1000);
+}
+
 void
 tulip_emmc_probe(void)
 {
@@ -424,6 +460,13 @@ tulip_emmc_probe(void)
 		printf("tulip_emmc: sdcc1 rcg cmd 0x%08x cfg 0x%08x (source %u, divider %u.%u) m 0x%x n 0x%x d 0x%x\n",
 		    r[0], cfg, (cfg >> 8) & 7, ((cfg & 0x1f) + 1) / 2, (cfg & 0x1f) % 2 ? 0 : 5, r[2], r[3], r[4]);
 	}
+	if (emmc_xfer(false, MMC_SEND_EXT_CSD, 0, 1) == 0) {
+		const uint8_t *ext = emmc_dma.data;
+		printf("tulip_emmc: ext_csd rev %u bus_width 0x%x hs_timing 0x%x device_type 0x%x strobe %u\n",
+		    ext[192], ext[183], ext[185], ext[196], ext[184]);
+	}
+	emmc_benchmark(100, 1);
+	emmc_benchmark(1024, BOUNCE_SIZE / SECTOR);
 	gpt_scan(NULL, NULL, NULL);
 }
 
