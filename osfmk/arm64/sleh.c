@@ -1889,11 +1889,8 @@ sleh_irq(arm_saved_state_t *state)
 		INTERRUPT_MASKED_DEBUG_START(cpu_signal_handler, DBG_INTR_TYPE_IPI);
 		cpu_signal_handler();
 		INTERRUPT_MASKED_DEBUG_END();
-	} else if (intid != GIC_SPURIOUS_IRQ && cdp->interrupt_handler != NULL) {
-		cdp->interrupt_handler(cdp->interrupt_target,
-		    cdp->interrupt_refCon,
-		    cdp->interrupt_nub,
-		    intid);
+	} else if (intid != GIC_SPURIOUS_IRQ && tulip_irq_handler != NULL) {
+		tulip_irq_handler(tulip_irq_target, intid);
 	}
 
 	if (iar != GIC_SPURIOUS_IRQ) {

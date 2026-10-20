@@ -65,6 +65,9 @@ void tulip_gic_report(void);
 void tulip_timer_selftest(void);
 void tulip_gic_enable_vtimer(void);
 void tulip_gic_send_ipi(uint32_t mpidr);
+/* Handler for every interrupt other than the timer and the IPI; set by TulipGIC. */
+extern void (*tulip_irq_handler)(void *target, uint32_t intid);
+extern void *tulip_irq_target;
 #ifdef __cplusplus
 }
 #endif

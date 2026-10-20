@@ -22,6 +22,8 @@ static vm_offset_t gicd_base;
 uint32_t tulip_vtimer_intid = TULIP_VTIMER_INTID_DEFAULT;
 uint64_t tulip_irq_count;
 uint32_t tulip_last_intid;
+void (*tulip_irq_handler)(void *target, uint32_t intid);
+void *tulip_irq_target;
 #endif
 static vm_offset_t gicr_base;
 static vm_offset_t gicr_size;

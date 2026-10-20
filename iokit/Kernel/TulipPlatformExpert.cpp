@@ -148,7 +148,7 @@ TulipPlatformExpert::processTopLevel(IORegistryEntry *root)
 
 	IORegistryEntry *armio = root->childFromPath("arm-io", gIODTPlane);
 	if (armio) {
-		createNubs(this, IODTFindMatchingEntries(armio, kIODTExclusive, "('gic')"));
+		createNubs(this, IODTFindMatchingEntries(armio, kIODTExclusive, NULL));
 		armio->release();
 	}
 }
