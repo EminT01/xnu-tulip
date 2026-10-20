@@ -122,6 +122,7 @@ private:
 	int32_t fOutX, fOutY, fOutWidth, fOutHeight;
 	bool fDown[NVT_MAX_TOUCHES];
 	IOFixed fX[NVT_MAX_TOUCHES], fY[NVT_MAX_TOUCHES];
+	UInt32 fSwipe[NVT_MAX_TOUCHES];
 
 	volatile uint32_t *reg(int block, uint32_t offset);
 	bool qupState(uint32_t state);
@@ -133,6 +134,41 @@ private:
 };
 
 OSDefineMetaClassAndStructors(TulipTouch, IOHIDEventService);
+
+/*
+ * Apple's touch firmware marks a touch that starts at the left, right or bottom edge, then marks its moves as a
+ * locked swipe away from that edge. UIKit's system edge gestures (the home gesture) need both marks.
+ */
+static UInt32
+edgeSwipe(IOFixed x, IOFixed y)
+{
+	const IOFixed edge = 0x10000 * 3 / 100;
+	if (y > 0x10000 - edge) {
+		return kIOHIDDigitizerEventSwipeUp;
+	}
+	if (x < edge) {
+		return kIOHIDDigitizerEventSwipeRight;
+	}
+	if (x > 0x10000 - edge) {
+		return kIOHIDDigitizerEventSwipeLeft;
+	}
+	return 0;
+}
+
+/* tulip's touch panel reports at most y = 2248 of 2280 rows; stretch the last rows so a swipe from the bottom edge starts at the edge. */
+#define TOUCH_STRETCH_FROM 2200
+#define TOUCH_MAX_Y        2248
+
+static int32_t
+bottomStretch(int32_t y, int32_t height)
+{
+	if (y <= TOUCH_STRETCH_FROM || height <= TOUCH_MAX_Y) {
+		return y;
+	}
+	int32_t stretched = TOUCH_STRETCH_FROM + (y - TOUCH_STRETCH_FROM) * (height - 1 - TOUCH_STRETCH_FROM) /
+	    (TOUCH_MAX_Y - TOUCH_STRETCH_FROM);
+	return stretched < height ? stretched : height - 1;
+}
 
 /* pos / size as a 16.16 fraction, clamped to [0, 1). */
 static IOFixed
@@ -364,7 +400,7 @@ TulipTouch::report(const uint8_t *buf)
 			continue;
 		}
 		int32_t px = (int32_t)((uint32_t)t[1] << 4 | t[3] >> 4) - fOutX;
-		int32_t py = (int32_t)((uint32_t)t[2] << 4 | (t[3] & 0xf)) - fOutY;
+		int32_t py = bottomStretch((int32_t)((uint32_t)t[2] << 4 | (t[3] & 0xf)), (int32_t)fHeight) - fOutY;
 		down[slot] = true;
 		x[slot] = unitFixed(px, fOutWidth);
 		y[slot] = unitFixed(py, fOutHeight);
@@ -376,6 +412,7 @@ TulipTouch::report(const uint8_t *buf)
 		return;
 	}
 	collection->setIntegerValue(kIOHIDEventFieldDigitizerCollection, TRUE);
+	collection->setIntegerValue(kIOHIDEventFieldDigitizerIsDisplayIntegrated, TRUE);
 	UInt32 collectionMask = 0;
 	bool any = false, changed = false;
 	IOFixed cx = 0, cy = 0;
@@ -389,15 +426,23 @@ TulipTouch::report(const uint8_t *buf)
 		}
 		if (down[i] && !fDown[i]) {
 			mask |= kIOHIDDigitizerEventIdentity;
+			fSwipe[i] = edgeSwipe(x[i], y[i]);
+			if (fSwipe[i]) {
+				mask |= kIOHIDDigitizerEventFromEdgeTip;
+			}
 		}
 		if (down[i] && fDown[i] && (x[i] != fX[i] || y[i] != fY[i])) {
 			mask |= kIOHIDDigitizerEventPosition;
+			if (fSwipe[i]) {
+				mask |= kIOHIDDigitizerEventSwipeLocked | fSwipe[i];
+			}
 		}
 		IOHIDEvent *finger = IOHIDEvent::digitizerEvent(now, (UInt32)i + 2, kIOHIDDigitizerTransducerTypeFinger,
 		    down[i], down[i] ? 1 : 0, x[i], y[i]);
 		if (finger) {
 			finger->setIntegerValue(kIOHIDEventFieldDigitizerIndex, i);
 			finger->setIntegerValue(kIOHIDEventFieldDigitizerIdentity, i + 2);
+			finger->setIntegerValue(kIOHIDEventFieldDigitizerIsDisplayIntegrated, TRUE);
 			finger->setIntegerValue(kIOHIDEventFieldDigitizerTouch, down[i]);
 			finger->setIntegerValue(kIOHIDEventFieldDigitizerEventMask, mask);
 			collection->appendChild(finger);
