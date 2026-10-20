@@ -14,6 +14,7 @@
 #include <miscfs/devfs/devfs.h>
 #include <kern/clock.h>
 #include <kern/locks.h>
+#include <kern/sched_prim.h>
 #include <machine/machine_routines.h>
 #include <pexpert/pexpert.h>
 #include <libkern/libkern.h>
@@ -156,13 +157,50 @@ wait_idle(void)
 	return true;
 }
 
+/* The SDHC1 controller interrupt (hc_irq, SPI 110). */
+#define SDHC1_INTID             142
+#define SDHCI_INT_ERRORS        0xffff0000u
+#define SPIN_NS                 100000
+#define SLEEP_NS                (2 * NSEC_PER_MSEC)
+
+static bool emmc_irq;
+static int emmc_irq_event;
+
+static void
+emmc_intr(void *arg __unused)
+{
+	hc_write32(SDHCI_SIGNAL_ENABLE, 0);
+	thread_wakeup(&emmc_irq_event);
+}
+
+static void
+sleep_int(uint32_t mask)
+{
+	if (!emmc_irq) {
+		emmc_irq = tulip_gic_install(SDHC1_INTID, false, emmc_intr, NULL);
+		if (emmc_irq) {
+			printf("tulip_emmc: interrupts\n");
+		}
+	}
+	if (!emmc_irq || !preemption_enabled()) {
+		return;
+	}
+	uint64_t deadline;
+	nanoseconds_to_absolutetime(SLEEP_NS, &deadline);
+	assert_wait_deadline(&emmc_irq_event, THREAD_UNINT, mach_absolute_time() + deadline);
+	hc_write32(SDHCI_SIGNAL_ENABLE, mask | SDHCI_INT_ERRORS);
+	thread_block(THREAD_CONTINUE_NULL);
+	hc_write32(SDHCI_SIGNAL_ENABLE, 0);
+}
+
 static bool
 wait_int(uint32_t mask, const char *what)
 {
-	uint64_t deadline;
+	uint64_t start = mach_absolute_time(), deadline, spin;
 
 	nanoseconds_to_absolutetime(5000 * NSEC_PER_MSEC, &deadline);
-	deadline += mach_absolute_time();
+	nanoseconds_to_absolutetime(SPIN_NS, &spin);
+	deadline += start;
 	for (;;) {
 		uint32_t st = hc_read32(SDHCI_INT_STATUS);
 		if (st & mask) {
@@ -173,10 +211,14 @@ wait_int(uint32_t mask, const char *what)
 			    hc_read32(SDHCI_ADMA_ERROR));
 			return false;
 		}
-		if (mach_absolute_time() > deadline) {
+		uint64_t now = mach_absolute_time();
+		if (now > deadline) {
 			printf("tulip_emmc: %s: timeout, present 0x%08x int_status 0x%08x\n", what,
 			    hc_read32(SDHCI_PRESENT_STATE), st);
 			return false;
+		}
+		if (now - start > spin) {
+			sleep_int(mask);
 		}
 	}
 }
