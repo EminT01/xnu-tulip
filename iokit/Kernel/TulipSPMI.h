@@ -80,6 +80,13 @@ public:
 		return true;
 	}
 
+	/* The arbiter's channel number of the peripheral at sid:addr. */
+	bool
+	apid(uint8_t sid, uint16_t addr, uint16_t *apid)
+	{
+		return findApid((uint16_t)(sid << 8 | addr >> 8), apid);
+	}
+
 	uint32_t
 	version() const
 	{
