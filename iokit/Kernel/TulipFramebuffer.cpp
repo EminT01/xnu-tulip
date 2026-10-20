@@ -60,13 +60,16 @@ class AppleCLCD : public IOMobileFramebuffer
 	OSDeclareDefaultStructors(AppleCLCD);
 
 public:
-	uint32_t fWidth, fHeight, fRowBytes;
+	uint32_t fWidth, fHeight;
+	uint32_t fPanelWidth, fPanelHeight, fRowBytes;
+	int32_t fOriginX, fOriginY;
 	TulipSurface *fPanel;
 	IOLock *fLock;
 	OSArray *fClients;
 	uint32_t fSwapID;
 
 	virtual bool start(IOService *provider) APPLE_KEXT_OVERRIDE;
+	static uint32_t canvasSize(IOService *provider, const char *key, uint32_t fallback);
 	void addClient(IOMobileFramebufferUserClient *client);
 	void removeClient(IOMobileFramebufferUserClient *client);
 	void swap(const uint8_t *record);
@@ -106,6 +109,18 @@ private:
 
 OSDefineMetaClassAndStructors(IOMobileFramebufferUserClient, IOUserClient);
 
+uint32_t
+AppleCLCD::canvasSize(IOService *provider, const char *key, uint32_t fallback)
+{
+	OSData *data = OSDynamicCast(OSData, provider->getProperty(key));
+	if (!data || data->getLength() != sizeof(uint32_t)) {
+		return fallback;
+	}
+	uint32_t value;
+	memcpy(&value, data->getBytesNoCopy(), sizeof(value));
+	return value ? value : fallback;
+}
+
 bool
 AppleCLCD::start(IOService *provider)
 {
@@ -115,13 +130,18 @@ AppleCLCD::start(IOService *provider)
 		return false;
 	}
 	PE_current_console(&video);
-	fWidth = (uint32_t)video.v_width;
-	fHeight = (uint32_t)video.v_height;
+	fPanelWidth = (uint32_t)video.v_width;
+	fPanelHeight = (uint32_t)video.v_height;
 	fRowBytes = (uint32_t)video.v_rowBytes;
-	if (video.v_baseAddr == 0 || fWidth == 0 || fHeight == 0 || fRowBytes < fWidth * 4) {
+	if (video.v_baseAddr == 0 || fPanelWidth == 0 || fPanelHeight == 0 || fRowBytes < fPanelWidth * 4) {
 		IOLog("TulipFB: no boot framebuffer\n");
 		return false;
 	}
+	/* iOS gets the canvas size from the device tree; the panel shows its center. */
+	fWidth = canvasSize(provider, "canvas-width", fPanelWidth);
+	fHeight = canvasSize(provider, "canvas-height", fPanelHeight);
+	fOriginX = ((int32_t)fWidth - (int32_t)fPanelWidth) / 2;
+	fOriginY = ((int32_t)fHeight - (int32_t)fPanelHeight) / 2;
 	OSDictionary *match = IOService::nameMatching("IOCoreSurfaceRoot");
 	IOService *surfaces = match ? IOService::waitForMatchingService(match, 10 * NSEC_PER_SEC) : NULL;
 	OSSafeReleaseNULL(match);
@@ -132,7 +152,7 @@ AppleCLCD::start(IOService *provider)
 	surfaces->release();
 	fLock = IOLockAlloc();
 	fClients = OSArray::withCapacity(4);
-	fPanel = tulip_surface_create_physical(video.v_baseAddr, fWidth, fHeight, fRowBytes, FORMAT_BGRA);
+	fPanel = tulip_surface_create_physical(video.v_baseAddr, fPanelWidth, fPanelHeight, fRowBytes, FORMAT_BGRA);
 	fWorkLoop = IOWorkLoop::workLoop();
 	fVsync = IOTimerEventSource::timerEventSource(this, &AppleCLCD::vsync);
 	if (!fLock || !fClients || !fPanel || !fWorkLoop || !fVsync ||
@@ -145,7 +165,8 @@ AppleCLCD::start(IOService *provider)
 	setProperty("external", false);
 	setProperty("DisplayPipePlaneBaseAlignment", 64ULL, 32);
 	registerService();
-	IOLog("TulipFB: %ux%u, %u bytes per row, panel surface %u\n", fWidth, fHeight, fRowBytes, fPanel->id);
+	IOLog("TulipFB: %ux%u, panel %ux%u at %d,%d, %u bytes per row, panel surface %u\n", fWidth, fHeight,
+	    fPanelWidth, fPanelHeight, fOriginX, fOriginY, fRowBytes, fPanel->id);
 	return true;
 }
 
@@ -197,7 +218,7 @@ get32(const uint8_t *p, uint32_t off)
 
 static uint32_t gSwapsLogged;
 
-/* Copy each enabled 32-bit layer into the panel, clipped, without scaling. */
+/* Copy each enabled 32-bit layer into the panel, clipped to the panel's part of the canvas, without scaling. */
 void
 AppleCLCD::swap(const uint8_t *record)
 {
@@ -216,14 +237,24 @@ AppleCLCD::swap(const uint8_t *record)
 			continue;
 		}
 		int32_t sx = MAX(get32(src, 0), 0), sy = MAX(get32(src, 4), 0);
-		int32_t dx = MAX(get32(dst, 0), 0), dy = MAX(get32(dst, 4), 0);
+		int32_t dx = MAX(get32(dst, 0), 0) - fOriginX, dy = MAX(get32(dst, 4), 0) - fOriginY;
 		int32_t w = get32(dst, 8), h = get32(dst, 12);
 		if (w <= 0 || h <= 0) {
 			w = (int32_t)s->width;
 			h = (int32_t)s->height;
 		}
-		w = MIN(w, MIN((int32_t)s->width - sx, (int32_t)fWidth - dx));
-		h = MIN(h, MIN((int32_t)s->height - sy, (int32_t)fHeight - dy));
+		if (dx < 0) {
+			sx -= dx;
+			w += dx;
+			dx = 0;
+		}
+		if (dy < 0) {
+			sy -= dy;
+			h += dy;
+			dy = 0;
+		}
+		w = MIN(w, MIN((int32_t)s->width - sx, (int32_t)fPanelWidth - dx));
+		h = MIN(h, MIN((int32_t)s->height - sy, (int32_t)fPanelHeight - dy));
 		if (gSwapsLogged < 8) {
 			gSwapsLogged++;
 			kprintf("TulipFB: swap %d layer %u surface %u %ux%u format 0x%x -> %d,%d %dx%d\n",
