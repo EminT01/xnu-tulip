@@ -791,9 +791,16 @@ tulip_fb_transmit_ready(void)
 	return 1;
 }
 
+/* Set by AppleCLCD's first swap with tulip_quiet=1: iOS owns the panel, the console stops drawing on it. */
+bool tulip_fb_muted;
+extern unsigned int kernel_debugger_entry_count;
+
 static void
 tulip_fb_transmit_data(uint8_t c)
 {
+	if (tulip_fb_muted && kernel_debugger_entry_count == 0) {
+		return;
+	}
 	if (c == '\n') {
 		tulip_fb_newline();
 		return;

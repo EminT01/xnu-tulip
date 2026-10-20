@@ -65,6 +65,7 @@ public:
 	/* The canvas, scaled by fScale (16.16), fills fOutWidth x fOutHeight of the panel at fOutX, fOutY. */
 	uint32_t fScale, fOutX, fOutY, fOutWidth, fOutHeight;
 	int32_t *fColumns;
+	bool fQuiet;
 	TulipSurface *fPanel;
 	IOLock *fLock;
 	OSArray *fClients;
@@ -147,6 +148,8 @@ AppleCLCD::start(IOService *provider)
 	fOutHeight = (uint32_t)(((uint64_t)fHeight * fScale) >> 16);
 	fOutX = (fPanelWidth - fOutWidth) / 2;
 	fOutY = (fPanelHeight - fOutHeight) / 2;
+	uint32_t quiet = 0;
+	fQuiet = PE_parse_boot_argn("tulip_quiet", &quiet, sizeof(quiet)) && quiet;
 	fColumns = (int32_t *)IOMallocData(fOutWidth * 2 * sizeof(int32_t));
 	if (!fColumns) {
 		return false;
@@ -248,11 +251,16 @@ sourcePosition(uint32_t out, uint32_t scale)
 }
 
 /* Draws each enabled 32-bit layer into the panel, scaled from canvas to panel with bilinear filtering. */
+extern "C" bool tulip_fb_muted;
+
 void
 AppleCLCD::swap(const uint8_t *record)
 {
 	uint32_t mask = (uint32_t)get32(record, SWAP_LAYER_MASK);
 
+	if (fQuiet && !tulip_fb_muted) {
+		tulip_fb_muted = true;
+	}
 	uint8_t *panel = fPanel->pixels();
 
 	for (uint32_t layer = 0; layer < LAYERS; layer++) {
