@@ -17,6 +17,8 @@
 #include <libkern/c++/OSNumber.h>
 #include <libkern/c++/OSSerialize.h>
 #include <libkern/c++/OSUnserialize.h>
+#include <libkern/c++/OSCollectionIterator.h>
+#include <pexpert/pexpert.h>
 
 extern "C" {
 #include <machine/atomic.h>
@@ -55,6 +57,7 @@ enum {
 OSDefineMetaClassAndStructors(TulipSurface, OSObject);
 
 static IOLock *gSurfaceLock;
+bool tulip_surface_log;
 static TulipSurface *gSurfaces[MAX_SURFACES];
 static uint32_t gSurfaceUsers[MAX_SURFACES];
 static uint32_t gNextSurfaceID = 1;
@@ -232,6 +235,19 @@ surface_create(OSDictionary *props, uint32_t parentID)
 		s->release();
 		return NULL;
 	}
+	if (tulip_surface_log) {
+		char name[32], keys[256] = "";
+		size_t len = 0;
+		proc_selfname(name, sizeof(name));
+		OSCollectionIterator *it = OSCollectionIterator::withCollection(props);
+		for (OSSymbol *key; it && (key = OSDynamicCast(OSSymbol, it->getNextObject())) && len < sizeof(keys);) {
+			len += (size_t)snprintf(keys + len, sizeof(keys) - len, " %s", key->getCStringNoCopy());
+		}
+		OSSafeReleaseNULL(it);
+		IOLog("TulipSurface: %s create %u parent %u %ux%u format 0x%x bpe %u element %ux%u bpr %u offset %u planes %u "
+		    "size %u:%s\n", name, s->id, parentID, s->width, s->height, s->pixelFormat, s->bytesPerElement,
+		    s->elementWidth, s->elementHeight, s->bytesPerRow, s->offset, s->planeCount, s->allocSize, keys);
+	}
 	return s;
 }
 
@@ -391,6 +407,8 @@ IOCoreSurfaceRoot::start(IOService *provider)
 		return false;
 	}
 	gSurfaceLock = IOLockAlloc();
+	uint32_t log = 0;
+	tulip_surface_log = PE_parse_boot_argn("tulip_surflog", &log, sizeof(log)) && log;
 	registerService();
 	return true;
 }
@@ -632,6 +650,13 @@ IOSurfaceRootUserClient::create(IOExternalMethodArguments *args)
 	}
 	uint32_t parent = args->scalarInputCount > 0 ? (uint32_t)args->scalarInput[0] : 0;
 	TulipSurface *s = surface_create(props, parent);
+	if (!s && tulip_surface_log) {
+		char name[32];
+		proc_selfname(name, sizeof(name));
+		IOLog("TulipSurface: %s create %ux%u format 0x%x failed, %llu MiB in use\n", name,
+		    dict_u32(props, "IOSurfaceWidth", 0), dict_u32(props, "IOSurfaceHeight", 0),
+		    dict_u32(props, "IOSurfacePixelFormat", 0), gSurfaceBytes >> 20);
+	}
 	obj->release();
 	if (!s) {
 		return kIOReturnNoMemory;
@@ -834,6 +859,12 @@ IOSurfaceRootUserClient::externalMethod(uint32_t selector, IOExternalMethodArgum
 	case kSelRemoveValue:
 		return removeValue(args);
 	default:
+		if (tulip_surface_log) {
+			char name[32];
+			proc_selfname(name, sizeof(name));
+			IOLog("TulipSurface: %s unhandled selector %u scalars %u/%u struct %u/%u\n", name, selector,
+			    args->scalarInputCount, args->scalarOutputCount, args->structureInputSize, args->structureOutputSize);
+		}
 		for (uint32_t i = 0; i < args->scalarOutputCount; i++) {
 			args->scalarOutput[i] = 0;
 		}

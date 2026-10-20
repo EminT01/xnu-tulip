@@ -77,6 +77,8 @@ public:
 	void addClient(IOMobileFramebufferUserClient *client);
 	void removeClient(IOMobileFramebufferUserClient *client);
 	void swap(const uint8_t *record);
+	void logLayers(const uint8_t *record, uint32_t mask);
+	char fLastLayers[512];
 
 private:
 	IOWorkLoop *fWorkLoop;
@@ -234,6 +236,7 @@ get32(const uint8_t *p, uint32_t off)
 }
 
 static uint32_t gSwapsLogged;
+extern bool tulip_surface_log;
 
 /* Mixes two BGRA pixels, weight w of 256 for b, two channels per multiply. */
 static inline uint32_t
@@ -255,6 +258,31 @@ sourcePosition(uint32_t out, uint32_t scale)
 extern "C" bool tulip_fb_muted;
 extern void tulip_display_power(bool on);
 
+/* Logs the swap's layers whenever their sizes, formats or rectangles change; surface ids alternate every frame. */
+void
+AppleCLCD::logLayers(const uint8_t *record, uint32_t mask)
+{
+	char line[512];
+	size_t len = (size_t)snprintf(line, sizeof(line), "TulipFB: layers 0x%x", mask);
+	for (uint32_t layer = 0; layer < LAYERS && len < sizeof(line); layer++) {
+		uint32_t id = (uint32_t)get32(record, SWAP_SURFACES + 4 * layer);
+		if (!(mask & (1u << layer)) || id == 0) {
+			continue;
+		}
+		const uint8_t *src = record + SWAP_SOURCE_RECTS + 16 * layer;
+		const uint8_t *dst = record + SWAP_DEST_RECTS + 16 * layer;
+		TulipSurface *s = tulip_surface_copy(id);
+		len += (size_t)snprintf(line + len, sizeof(line) - len, " | %u: %ux%u 0x%x src %d,%d %dx%d dst %d,%d %dx%d",
+		    layer, s ? s->width : 0, s ? s->height : 0, s ? s->pixelFormat : 0, get32(src, 0), get32(src, 4),
+		    get32(src, 8), get32(src, 12), get32(dst, 0), get32(dst, 4), get32(dst, 8), get32(dst, 12));
+		OSSafeReleaseNULL(s);
+	}
+	if (strcmp(line, fLastLayers) != 0) {
+		strlcpy(fLastLayers, line, sizeof(fLastLayers));
+		IOLog("%s (surface %u)\n", line, (uint32_t)get32(record, SWAP_SURFACES));
+	}
+}
+
 void
 AppleCLCD::swap(const uint8_t *record)
 {
@@ -264,6 +292,9 @@ AppleCLCD::swap(const uint8_t *record)
 		tulip_fb_muted = true;
 	}
 	uint8_t *panel = fPanel->pixels();
+	if (tulip_surface_log) {
+		logLayers(record, mask);
+	}
 
 	for (uint32_t layer = 0; layer < LAYERS; layer++) {
 		uint32_t id = (uint32_t)get32(record, SWAP_SURFACES + 4 * layer);
