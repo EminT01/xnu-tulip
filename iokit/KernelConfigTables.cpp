@@ -79,6 +79,11 @@ const char * gIOKernelConfigTables =
     "     'IOProviderClass' = IOPlatformDevice;"
     "     'IONameMatch'     = 'novatek,nt36672a';"
     "   },"
+    "   {"
+    "     'IOClass'         = TulipCPUClock;"
+    "     'IOProviderClass' = IOPlatformDevice;"
+    "     'IONameMatch'     = 'qcom,sdm660-cpu-clock';"
+    "   },"
 #endif
     "   {"
     "     'IOClass'         = IOPanicPlatform;"
