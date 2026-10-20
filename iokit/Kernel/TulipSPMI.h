@@ -62,12 +62,11 @@ public:
 		for (unsigned int i = 0; i < len; i++) {
 			data |= (uint32_t)buf[i] << (8 * i);
 		}
-		*(volatile uint32_t *)(chan + kWriteData) = data;
-		*(volatile uint32_t *)(chan + kCmd) = kOpExtWriteL << 27 | (addr & 0xff) << 4 | (len - 1);
 		uint32_t status = 0;
-		for (int i = 0; i < 1000 && !(status & kStatusDone); i++) {
-			IODelay(1);
-			status = *(volatile uint32_t *)(chan + kStatus);
+		for (int attempt = 0; attempt < kAttempts && !(status & kStatusDone && !(status & kStatusErrors)); attempt++) {
+			*(volatile uint32_t *)(chan + kWriteData) = data;
+			*(volatile uint32_t *)(chan + kCmd) = kOpExtWriteL << 27 | (addr & 0xff) << 4 | (len - 1);
+			status = wait(chan);
 		}
 		if (!(status & kStatusDone) || (status & kStatusErrors)) {
 			kprintf("TulipSPMI: write sid %u 0x%04x: status 0x%x\n", sid, addr, status);
@@ -98,10 +97,9 @@ public:
 		}
 		volatile uint8_t *obs = (volatile uint8_t *)fObserver->getVirtualAddress() + 0x1000 * kEE + 0x8000 * apid;
 		uint32_t status = 0;
-		*(volatile uint32_t *)(obs + kCmd) = kOpExtReadL << 27 | (addr & 0xff) << 4 | (len - 1);
-		for (int i = 0; i < 1000 && !(status & kStatusDone); i++) {
-			IODelay(1);
-			status = *(volatile uint32_t *)(obs + kStatus);
+		for (int attempt = 0; attempt < kAttempts && !(status & kStatusDone && !(status & kStatusErrors)); attempt++) {
+			*(volatile uint32_t *)(obs + kCmd) = kOpExtReadL << 27 | (addr & 0xff) << 4 | (len - 1);
+			status = wait(obs);
 		}
 		if (!(status & kStatusDone) || (status & kStatusErrors)) {
 			kprintf("TulipSPMI: read sid %u 0x%04x: status 0x%x\n", sid, addr, status);
@@ -129,7 +127,20 @@ private:
 		kStatusDone = 1u << 0,
 		kStatusErrors = 0xeu,
 		kApidValid = 0x8000,
+		kAttempts = 3,
 	};
+
+	/* The arbiter sometimes drops a transfer (status bit 3); Linux treats that as transient too. */
+	static uint32_t
+	wait(volatile uint8_t *chan)
+	{
+		uint32_t status = 0;
+		for (int i = 0; i < 1000 && !(status & kStatusDone); i++) {
+			IODelay(1);
+			status = *(volatile uint32_t *)(chan + kStatus);
+		}
+		return status;
+	}
 
 	bool
 	findApid(uint16_t ppid, uint16_t *apid)
