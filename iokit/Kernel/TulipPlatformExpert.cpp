@@ -34,7 +34,9 @@ extern void tulip_cpu_init(void);
 extern "C" uint64_t tulip_emmc_stats[4];
 
 /* CPU clock in MHz: PMU cycles over 10 ms of timer time. */
-static uint64_t
+uint64_t tulip_cpu_mhz(void);
+
+uint64_t
 tulip_cpu_mhz(void)
 {
 	uint64_t ten_ms, start, cycles;

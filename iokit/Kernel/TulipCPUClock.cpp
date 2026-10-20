@@ -8,6 +8,12 @@
 #include <IOKit/IOService.h>
 #include "TulipSPMI.h"
 
+extern "C" {
+#include <pexpert/pexpert.h>
+}
+
+extern uint64_t tulip_cpu_mhz(void);
+
 /* Register blocks of the /arm-io/cpu-clock node, in its "reg" order. */
 enum {
 	kRegFuses,
@@ -24,8 +30,43 @@ enum {
 
 /* APC1 (Gold rail) candidates: PM660 (SID 1) S1, S2, S3. */
 static const uint16_t gSMPS[] = { 0x1400, 0x1700, 0x1a00 };
+#define GOLD_RAIL               0x1a00
+#define SMPS_VALID_MV           0x42
 
-/* Gold cluster clock and voltage. Read-only for now: it logs the state that the bootloader leaves. */
+#define FUSE_SPEED_BIN          0x130
+#define OSM_PERF_ENABLE         0x3004
+#define CPRH_LOOP_ENABLE        0x4004
+#define CPRH_CTL                0x7aa0
+#define APM_PERF_STATUS         0x18
+#define APM_STATUS_MASK         0x1f
+
+#define PLL_MODE                0x0
+#define PLL_L                   0x4
+#define PLL_STATUS              0x2c
+#define PLL_MODE_OUTCTRL        (1u << 0)
+#define PLL_MODE_BYPASSNL       (1u << 1)
+#define PLL_MODE_RESET_N        (1u << 2)
+#define PLL_STATUS_LOCK         (1u << 16)
+
+#define MUX_CMD                 0x50
+#define MUX_CFG                 0x54
+#define MUX_CMD_UPDATE          (1u << 0)
+#define MUX_CMD_ROOT_EN         (1u << 1)
+#define MUX_CFG_SRC_MASK        0x71fu
+#define MUX_SRC_GPLL0           0x400u
+#define MUX_SRC_PLL_MAIN        0x300u
+
+/* Highest PLL L value (x 19.2 MHz) for each Gold rail voltage, from the bin 3 perfcl table's ceilings. */
+static const struct {
+	uint32_t l;
+	uint32_t mv;
+} gGoldSteps[] = {
+	{ 0x3a, 724 },  /* 1113.6 MHz */
+	{ 0x49, 788 },  /* 1401.6 MHz */
+	{ 0x5b, 868 },  /* 1747.2 MHz */
+};
+
+/* Gold cluster clock: logs the state that the bootloader leaves, and with tulip_gold_l=L runs the Gold PLL at L. */
 class TulipCPUClock : public IOService
 {
 	OSDeclareDefaultStructors(TulipCPUClock);
@@ -43,10 +84,78 @@ private:
 		return *(volatile uint32_t *)(fMap[block]->getVirtualAddress() + offset);
 	}
 
+	void
+	setReg(int block, uint32_t offset, uint32_t value)
+	{
+		*(volatile uint32_t *)(fMap[block]->getVirtualAddress() + offset) = value;
+	}
+
+	bool setMux(uint32_t source);
+	bool setGoldL(uint32_t l);
+
 	void logBlock(const char *name, int block, const uint32_t *offsets, unsigned int count);
 };
 
 OSDefineMetaClassAndStructors(TulipCPUClock, IOService);
+
+bool
+TulipCPUClock::setMux(uint32_t source)
+{
+	setReg(kRegPerfMux, MUX_CFG, (reg(kRegPerfMux, MUX_CFG) & ~MUX_CFG_SRC_MASK) | source);
+	setReg(kRegPerfMux, MUX_CMD, MUX_CMD_UPDATE | MUX_CMD_ROOT_EN);
+	for (int i = 0; i < 100; i++) {
+		if (!(reg(kRegPerfMux, MUX_CMD) & MUX_CMD_UPDATE)) {
+			return true;
+		}
+		IODelay(1);
+	}
+	return false;
+}
+
+/* Runs the Gold PLL at l x 19.2 MHz and the Gold cluster from it. OSM and CPRh stay off; the rail must already hold the voltage. */
+bool
+TulipCPUClock::setGoldL(uint32_t l)
+{
+	uint32_t needMv = 0;
+	for (unsigned int i = 0; i < sizeof(gGoldSteps) / sizeof(gGoldSteps[0]) && !needMv; i++) {
+		if (l <= gGoldSteps[i].l) {
+			needMv = gGoldSteps[i].mv;
+		}
+	}
+	uint8_t lo = 0, hi = 0;
+	bool rail = fSPMI.read(1, GOLD_RAIL + SMPS_VALID_MV, &lo) && fSPMI.read(1, GOLD_RAIL + SMPS_VALID_MV + 1, &hi);
+	uint32_t railMv = (uint32_t)hi << 8 | lo;
+	if (!needMv || !rail || railMv < needMv || (reg(kRegFuses, FUSE_SPEED_BIN) >> 29 & 7) != 3 ||
+	    (reg(kRegOSM, OSM_PERF_ENABLE) & 1) || (reg(kRegOSM, CPRH_LOOP_ENABLE) & 1) || (reg(kRegOSM, CPRH_CTL) & 1) ||
+	    (reg(kRegAPM, APM_PERF_STATUS) & APM_STATUS_MASK)) {
+		IOLog("TulipCPUClock: not setting L 0x%x: needs %u mV, rail %u mV\n", l, needMv, railMv);
+		return false;
+	}
+
+	boolean_t istate = ml_set_interrupts_enabled(FALSE);
+	bool ok = setMux(MUX_SRC_GPLL0);
+	if (ok) {
+		setReg(kRegPerfPLL, PLL_MODE, 0);
+		setReg(kRegPerfPLL, PLL_L, l);
+		setReg(kRegPerfPLL, PLL_MODE, PLL_MODE_BYPASSNL);
+		IODelay(10);
+		setReg(kRegPerfPLL, PLL_MODE, PLL_MODE_BYPASSNL | PLL_MODE_RESET_N);
+		IODelay(50);
+		ok = false;
+		for (int i = 0; i < 200 && !ok; i++) {
+			ok = reg(kRegPerfPLL, PLL_STATUS) & PLL_STATUS_LOCK;
+			IODelay(1);
+		}
+		if (ok) {
+			setReg(kRegPerfPLL, PLL_MODE, PLL_MODE_BYPASSNL | PLL_MODE_RESET_N | PLL_MODE_OUTCTRL);
+			ok = setMux(MUX_SRC_PLL_MAIN);
+		}
+	}
+	ml_set_interrupts_enabled(istate);
+	IOLog("TulipCPUClock: L 0x%x (%u kHz) at %u mV: %s, mux 0x%08x\n", l, l * 19200, railMv, ok ? "ok" : "failed",
+	    reg(kRegPerfMux, MUX_CFG));
+	return ok;
+}
 
 void
 TulipCPUClock::logBlock(const char *name, int block, const uint32_t *offsets, unsigned int count)
@@ -106,6 +215,13 @@ TulipCPUClock::start(IOService *provider)
 			len += (size_t)snprintf(line + len, sizeof(line) - len, ok ? " %02x=%02x" : " %02x=--", smpsRegs[i], v);
 		}
 		IOLog("%s\n", line);
+	}
+
+	uint32_t l = 0;
+	if (PE_parse_boot_argn("tulip_gold_l", &l, sizeof(l)) && l) {
+		IOLog("TulipCPUClock: %llu MHz before\n", tulip_cpu_mhz());
+		setGoldL(l);
+		IOLog("TulipCPUClock: %llu MHz after\n", tulip_cpu_mhz());
 	}
 	return true;
 }
