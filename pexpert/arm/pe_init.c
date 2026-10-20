@@ -275,7 +275,7 @@ PE_init_iokit(void)
 	scale = PE_state.video.v_scale;
 	flip = 1;
 
-#if defined(XNU_TARGET_OS_OSX)
+#if defined(XNU_TARGET_OS_OSX) && !CONFIG_TULIP
 	int notused;
 	show_progress = TRUE;
 	if (PE_parse_boot_argn("-restore", &notused, sizeof(notused))) {
