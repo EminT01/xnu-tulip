@@ -86,7 +86,8 @@ const char * gIOKernelConfigTables =
     "   },"
     "   {"
     "     'IOClass'         = TulipBattery;"
-    "     'IOProviderClass' = IOResources;"
+    "     'IOProviderClass' = IOPlatformDevice;"
+    "     'IONameMatch'     = 'qcom,spmi-pmic-arb';"
     "     'IOMatchCategory' = TulipBattery;"
     "   },"
 #endif
