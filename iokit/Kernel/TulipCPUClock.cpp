@@ -32,6 +32,7 @@ enum {
 static const uint16_t gSMPS[] = { 0x1400, 0x1700, 0x1a00 };
 #define GOLD_RAIL               0x1a00
 #define SMPS_VALID_MV           0x42
+#define GOLD_RAIL_MAX_MV        1100
 
 #define FUSE_SPEED_BIN          0x130
 #define OSM_PERF_ENABLE         0x3004
@@ -122,10 +123,10 @@ TulipCPUClock::setGoldL(uint32_t l)
 			needMv = gGoldSteps[i].mv;
 		}
 	}
-	uint8_t lo = 0, hi = 0;
-	bool rail = fSPMI.read(1, GOLD_RAIL + SMPS_VALID_MV, &lo) && fSPMI.read(1, GOLD_RAIL + SMPS_VALID_MV + 1, &hi);
-	uint32_t railMv = (uint32_t)hi << 8 | lo;
-	if (!needMv || !rail || railMv < needMv || (reg(kRegFuses, FUSE_SPEED_BIN) >> 29 & 7) != 3 ||
+	uint8_t mv[2] = {};
+	bool rail = fSPMI.read(1, GOLD_RAIL + SMPS_VALID_MV, mv, 2);
+	uint32_t railMv = (uint32_t)mv[1] << 8 | mv[0];
+	if (!needMv || !rail || railMv < needMv || railMv > GOLD_RAIL_MAX_MV || (reg(kRegFuses, FUSE_SPEED_BIN) >> 29 & 7) != 3 ||
 	    (reg(kRegOSM, OSM_PERF_ENABLE) & 1) || (reg(kRegOSM, CPRH_LOOP_ENABLE) & 1) || (reg(kRegOSM, CPRH_CTL) & 1) ||
 	    (reg(kRegAPM, APM_PERF_STATUS) & APM_STATUS_MASK)) {
 		IOLog("TulipCPUClock: not setting L 0x%x: needs %u mV, rail %u mV\n", l, needMv, railMv);
