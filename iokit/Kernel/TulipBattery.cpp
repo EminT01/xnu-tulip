@@ -16,6 +16,7 @@
 #define WARN_PERCENT            10
 #define POLL_MS                 2000
 #define REPORT_POLLS            15
+#define MAX_FAILURE_LOGS        10
 
 /* PM660 (SID 0) SMB2 charger and FG gen3 fuel gauge registers (Linux qpnp-smb2 and qpnp-fg-gen3). */
 #define PM660_SID               0
@@ -62,6 +63,9 @@ private:
 	TulipSPMI fSPMI;
 	IOTimerEventSource *fTimer;
 	unsigned int fPolls;
+	unsigned int fFailures;
+	int32_t fMinMv;
+	int32_t fMaxLoadMa;
 	bool fReported;
 	bool fLastOnline;
 	uint8_t fLastState;
@@ -179,6 +183,9 @@ TulipBattery::update()
 	    readU8(FG_INFO_INT_RT_STS, &infoSts) && readU8(BATIF_INT_RT_STS, &batif) && readU16(FG_VBATT, &vraw) &&
 	    readU16(FG_VBATT + 2, &iraw) && readU16(FG_BATT_TEMP, &traw) && readPercent(&percent);
 	if (!ok) {
+		if (fFailures++ < MAX_FAILURE_LOGS) {
+			IOLog("TulipBattery: register read failed\n");
+		}
 		return;
 	}
 
@@ -191,6 +198,9 @@ TulipBattery::update()
 	int32_t ma = (int32_t)(-(int64_t)(int16_t)iraw * 488281 / 1000000);
 	int32_t centiC = (int32_t)(traw & 0x7ff) * 25 - 27315;
 	if (mv < MIN_VALID_MV) {
+		if (fFailures++ < MAX_FAILURE_LOGS) {
+			IOLog("TulipBattery: ignoring %d mV\n", mv);
+		}
 		return;
 	}
 	bool empty = (socSts & FG_MSOC_EMPTY) && mv < CUTOFF_MV;
@@ -198,15 +208,18 @@ TulipBattery::update()
 		percent = 0;
 	}
 
+	fMinMv = fMinMv && fMinMv < mv ? fMinMv : mv;
+	fMaxLoadMa = fMaxLoadMa > -ma ? fMaxLoadMa : -ma;
 	bool changed = !fReported || online != fLastOnline || state != fLastState || percent != fLastPercent;
 	if (!changed && ++fPolls < REPORT_POLLS) {
 		return;
 	}
 	fPolls = 0;
-	if (changed) {
-		IOLog("TulipBattery: %u%%, %d mV, %d mA, %d.%02d C, %s, charger state %u\n", percent, mv, ma,
-		    centiC / 100, (centiC < 0 ? -centiC : centiC) % 100, online ? "online" : "offline", state);
-	}
+	IOLog("TulipBattery: %u%%, %d mV (min %d), %d mA (max load %d), %d.%02d C, %s, charger state %u\n", percent, mv,
+	    fMinMv, ma, fMaxLoadMa, centiC / 100, (centiC < 0 ? -centiC : centiC) % 100, online ? "online" : "offline",
+	    state);
+	fMinMv = 0;
+	fMaxLoadMa = 0;
 	if (online != fLastOnline || !fReported) {
 		logState();
 	}
