@@ -36,6 +36,8 @@ extern "C" {
 #define ATTACHMENTS_SIZE    0x70
 #define ATTACHMENTS_ID      0x80
 #define PURGEABLE_KEEP      3
+#define STATE_USE_COUNTS    0x18
+#define USE_CATEGORIES      2
 #define STATE_VALUES_GEN    0x20
 #define STATE_VALUES_SIZE   0x28
 #define STATE_TIMESTAMPS    0x800
@@ -331,6 +333,21 @@ tulip_surface_port(TulipSurface *surface, task_t task)
 	return iokit_make_send_right(task, surface, IKOT_IOKIT_OBJECT);
 }
 
+/* IOSurfaceIsInUse reads these counters from the state page; the render server holds a use while it composites. */
+static volatile uint32_t *
+use_counter(TulipSurface *s, uint32_t category)
+{
+	return (volatile uint32_t *)((uint8_t *)s->state->getBytesNoCopy() + STATE_USE_COUNTS) + category;
+}
+
+static void
+use_count_sub(TulipSurface *s, uint32_t category, uint32_t n)
+{
+	if (n) {
+		os_atomic_sub(use_counter(s, category), n, relaxed);
+	}
+}
+
 /* A surface mapped into one client's task. */
 class TulipSurfaceRef : public OSObject
 {
@@ -341,6 +358,7 @@ public:
 	IOMemoryMap *dataMap;
 	IOMemoryMap *stateMap;
 	uint32_t count;
+	uint32_t uses[USE_CATEGORIES];
 
 	virtual bool
 	init() APPLE_KEXT_OVERRIDE
@@ -354,6 +372,9 @@ public:
 		OSSafeReleaseNULL(dataMap);
 		OSSafeReleaseNULL(stateMap);
 		if (surface) {
+			for (uint32_t category = 0; category < USE_CATEGORIES; category++) {
+				use_count_sub(surface, category, uses[category]);
+			}
 			surface_unuse(surface);
 			surface->release();
 		}
@@ -387,7 +408,8 @@ public:
 	    IOExternalMethodDispatch *dispatch, OSObject *target, void *reference) APPLE_KEXT_OVERRIDE;
 	virtual IOExternalTrap *getTargetAndTrapForIndex(IOService **targetP, UInt32 index) APPLE_KEXT_OVERRIDE;
 
-	IOReturn trapUseCount(void *, void *, void *, void *, void *, void *);
+	IOReturn trapUseIncrement(void *id, void *category, void *, void *, void *, void *);
+	IOReturn trapUseDecrement(void *id, void *category, void *, void *, void *, void *);
 	IOReturn trapLock(void *id, void *options, void *seedOut, void *, void *, void *);
 	IOReturn trapUnlock(void *id, void *options, void *seedOut, void *, void *, void *);
 	IOReturn trapRelease(void *id, void *, void *, void *, void *, void *);
@@ -921,9 +943,31 @@ IOSurfaceRootUserClient::externalMethod(uint32_t selector, IOExternalMethodArgum
 }
 
 IOReturn
-IOSurfaceRootUserClient::trapUseCount(void *, void *, void *, void *, void *, void *)
+IOSurfaceRootUserClient::trapUseIncrement(void *id, void *category, void *, void *, void *, void *)
 {
-	return kIOReturnSuccess;
+	uint32_t c = (uint32_t)(uintptr_t)category;
+	IOLockLock(fLock);
+	TulipSurfaceRef *ref = findRef((uint32_t)(uintptr_t)id, NULL);
+	if (ref && c < USE_CATEGORIES) {
+		ref->uses[c]++;
+		os_atomic_inc(use_counter(ref->surface, c), relaxed);
+	}
+	IOLockUnlock(fLock);
+	return ref ? kIOReturnSuccess : kIOReturnNotFound;
+}
+
+IOReturn
+IOSurfaceRootUserClient::trapUseDecrement(void *id, void *category, void *, void *, void *, void *)
+{
+	uint32_t c = (uint32_t)(uintptr_t)category;
+	IOLockLock(fLock);
+	TulipSurfaceRef *ref = findRef((uint32_t)(uintptr_t)id, NULL);
+	if (ref && c < USE_CATEGORIES && ref->uses[c]) {
+		ref->uses[c]--;
+		use_count_sub(ref->surface, c, 1);
+	}
+	IOLockUnlock(fLock);
+	return ref ? kIOReturnSuccess : kIOReturnNotFound;
 }
 
 static IOReturn
@@ -981,10 +1025,10 @@ IOSurfaceRootUserClient::trapRelease(void *id, void *, void *, void *, void *, v
 	return found ? kIOReturnSuccess : kIOReturnNotFound;
 }
 
-/* Traps 0/1 use count, 2 lock and 3 unlock (id, options, seed out), 4/5 release. */
+/* Traps 0/1 use count up/down (id, category), 2 lock and 3 unlock (id, options, seed out), 4/5 release. */
 static IOExternalTrap gSurfaceTraps[] = {
-	{ NULL, (IOTrap) & IOSurfaceRootUserClient::trapUseCount },
-	{ NULL, (IOTrap) & IOSurfaceRootUserClient::trapUseCount },
+	{ NULL, (IOTrap) & IOSurfaceRootUserClient::trapUseIncrement },
+	{ NULL, (IOTrap) & IOSurfaceRootUserClient::trapUseDecrement },
 	{ NULL, (IOTrap) & IOSurfaceRootUserClient::trapLock },
 	{ NULL, (IOTrap) & IOSurfaceRootUserClient::trapUnlock },
 	{ NULL, (IOTrap) & IOSurfaceRootUserClient::trapRelease },
