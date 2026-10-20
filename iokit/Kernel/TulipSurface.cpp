@@ -43,6 +43,7 @@ extern "C" {
 #define STATE_TIMESTAMPS    0x800
 #define MAX_SURFACES        4096
 #define MAX_DIMENSION       16384
+#define MAX_BYTES_PER_ROW   (256U << 10)
 #define MAX_SURFACE_BYTES   (256ULL << 20)
 #define MAX_TOTAL_BYTES     (768ULL << 20)
 #define MAX_PROPERTY_BYTES  (64U << 10)
@@ -57,7 +58,7 @@ enum {
 	kSelSetValue = 9,          /* u32 id, u32 pad, serialized [value, key] or dictionary */
 	kSelCopyValues = 0xa,      /* out: u32 reserved, u32 generation, serialized values */
 	kSelRemoveValue = 0xb,     /* u32 id, u32 pad, key (empty: all) */
-	kSelLimits = 13,           /* out 0x18 bytes; u16 at +0x16 is the ABI version, 1 */
+	kSelLimits = 13,           /* out 0x18 bytes: alignment masks, max bytes per row, width, height; u16 version at +0x16 */
 	kSelSetPurgeable = 20,     /* scalars [id, state] -> [old state] */
 	kSelSetAttachments = 27,   /* struct: 0x70 bytes of colour attachments, u64 size, u64 mask, u32 id */
 	kSelLookupFromPort = 0x22, /* scalar [port name] */
@@ -844,6 +845,9 @@ IOSurfaceRootUserClient::externalMethod(uint32_t selector, IOExternalMethodArgum
 		uint16_t version = 1;
 		put32(limits, 0x00, PAGE_SIZE - 1);
 		put32(limits, 0x04, ROW_ALIGN - 1);
+		put32(limits, 0x08, MAX_BYTES_PER_ROW);
+		put32(limits, 0x0c, MAX_DIMENSION);
+		put32(limits, 0x10, MAX_DIMENSION);
 		memcpy(limits + 0x16, &version, sizeof(version));
 		return struct_out(args, limits, sizeof(limits));
 	}
