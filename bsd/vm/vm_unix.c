@@ -1755,7 +1755,7 @@ out:
 	return error;
 }
 
-#if !XNU_TARGET_OS_OSX
+#if !XNU_TARGET_OS_OSX || CONFIG_TULIP
 /*
  * Freeze the specified process (provided in args->pid), or find and freeze a PID.
  * When a process is specified, this call is blocking, otherwise we wake up the
@@ -1817,7 +1817,7 @@ out:
 	*ret = error;
 	return error;
 }
-#endif /* !XNU_TARGET_OS_OSX */
+#endif /* !XNU_TARGET_OS_OSX || CONFIG_TULIP */
 
 #if SOCKETS
 int
