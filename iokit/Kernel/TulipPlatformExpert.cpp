@@ -5,6 +5,7 @@
 
 #include <IOKit/IOPlatformExpert.h>
 #include <IOKit/IODeviceTreeSupport.h>
+#include <IOKit/IOLocks.h>
 
 extern "C" {
 #include <machine/machine_routines.h>
@@ -30,6 +31,8 @@ private:
 };
 
 OSDefineMetaClassAndStructors(TulipPlatformExpert, IODTPlatformExpert);
+
+IOLock *gTulipSPMILock;
 
 extern void tulip_cpu_init(void);
 extern int64_t tulip_psci_call(uint64_t fn, uint64_t a1, uint64_t a2, uint64_t a3);

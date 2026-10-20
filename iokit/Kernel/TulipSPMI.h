@@ -10,6 +10,9 @@
 #include <IOKit/IOMemoryDescriptor.h>
 #include <IOKit/IOService.h>
 
+/* Defined in TulipPlatformExpert.cpp, so that all drivers share one. */
+extern IOLock *gTulipSPMILock;
+
 /* Reads and writes PMIC registers through a Qualcomm SPMI arbiter v2/v3 (Linux drivers/spmi/spmi-pmic-arb.c). */
 class TulipSPMI
 {
@@ -63,11 +66,13 @@ public:
 			data |= (uint32_t)buf[i] << (8 * i);
 		}
 		uint32_t status = 0;
+		IOLockLock(lock());
 		for (int attempt = 0; attempt < kAttempts && !(status & kStatusDone && !(status & kStatusErrors)); attempt++) {
 			*(volatile uint32_t *)(chan + kWriteData) = data;
 			*(volatile uint32_t *)(chan + kCmd) = kOpExtWriteL << 27 | (addr & 0xff) << 4 | (len - 1);
 			status = wait(chan);
 		}
+		IOLockUnlock(lock());
 		if (!(status & kStatusDone) || (status & kStatusErrors)) {
 			kprintf("TulipSPMI: write sid %u 0x%04x: status 0x%x\n", sid, addr, status);
 			return false;
@@ -96,16 +101,18 @@ public:
 			return false;
 		}
 		volatile uint8_t *obs = (volatile uint8_t *)fObserver->getVirtualAddress() + 0x1000 * kEE + 0x8000 * apid;
-		uint32_t status = 0;
+		uint32_t status = 0, data = 0;
+		IOLockLock(lock());
 		for (int attempt = 0; attempt < kAttempts && !(status & kStatusDone && !(status & kStatusErrors)); attempt++) {
 			*(volatile uint32_t *)(obs + kCmd) = kOpExtReadL << 27 | (addr & 0xff) << 4 | (len - 1);
 			status = wait(obs);
 		}
+		data = *(volatile uint32_t *)(obs + kReadData);
+		IOLockUnlock(lock());
 		if (!(status & kStatusDone) || (status & kStatusErrors)) {
 			kprintf("TulipSPMI: read sid %u 0x%04x: status 0x%x\n", sid, addr, status);
 			return false;
 		}
-		uint32_t data = *(volatile uint32_t *)(obs + kReadData);
 		for (unsigned int i = 0; i < len; i++) {
 			buf[i] = (uint8_t)(data >> (8 * i));
 		}
@@ -129,6 +136,19 @@ private:
 		kApidValid = 0x8000,
 		kAttempts = 3,
 	};
+
+	/* Every driver has its own TulipSPMI, but they share the arbiter's channels: one transfer at a time. */
+	static IOLock *
+	lock()
+	{
+		if (!gTulipSPMILock) {
+			IOLock *fresh = IOLockAlloc();
+			if (!OSCompareAndSwapPtr(NULL, fresh, (void * volatile *)&gTulipSPMILock)) {
+				IOLockFree(fresh);
+			}
+		}
+		return gTulipSPMILock;
+	}
 
 	/* The arbiter sometimes drops a transfer (status bit 3); Linux treats that as transient too. */
 	static uint32_t
