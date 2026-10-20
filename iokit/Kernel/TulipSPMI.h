@@ -36,13 +36,20 @@ public:
 	bool
 	read(uint8_t sid, uint16_t addr, uint8_t *value)
 	{
+		return read(sid, addr, value, 1);
+	}
+
+	/* Reads up to 4 consecutive registers in one SPMI transfer, so multi-byte values do not tear. */
+	bool
+	read(uint8_t sid, uint16_t addr, uint8_t *buf, unsigned int len)
+	{
 		uint16_t apid;
-		if (!findApid((uint16_t)(sid << 8 | addr >> 8), &apid)) {
+		if (len < 1 || len > 4 || !findApid((uint16_t)(sid << 8 | addr >> 8), &apid)) {
 			return false;
 		}
 		volatile uint8_t *obs = (volatile uint8_t *)fObserver->getVirtualAddress() + 0x1000 * kEE + 0x8000 * apid;
 		uint32_t status = 0;
-		*(volatile uint32_t *)(obs + kCmd) = kOpExtReadL << 27 | (addr & 0xff) << 4;
+		*(volatile uint32_t *)(obs + kCmd) = kOpExtReadL << 27 | (addr & 0xff) << 4 | (len - 1);
 		for (int i = 0; i < 1000 && !(status & kStatusDone); i++) {
 			IODelay(1);
 			status = *(volatile uint32_t *)(obs + kStatus);
@@ -51,7 +58,10 @@ public:
 			kprintf("TulipSPMI: read sid %u 0x%04x: status 0x%x\n", sid, addr, status);
 			return false;
 		}
-		*value = (uint8_t)*(volatile uint32_t *)(obs + kReadData);
+		uint32_t data = *(volatile uint32_t *)(obs + kReadData);
+		for (unsigned int i = 0; i < len; i++) {
+			buf[i] = (uint8_t)(data >> (8 * i));
+		}
 		return true;
 	}
 
