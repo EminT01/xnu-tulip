@@ -28,6 +28,7 @@ enum {
 	kSelSwapWait = 6,
 	kSelGetID = 7,
 	kSelGetDisplaySize = 8,          /* -> [width, height] */
+	kSelRequestPowerChange = 12,     /* [on] */
 	kSelIsMainDisplay = 18,
 	kSelGetDotPitch = 28,
 	kSelNotifications = 72,          /* [callback, refcon, type, 0] */
@@ -252,6 +253,7 @@ sourcePosition(uint32_t out, uint32_t scale)
 
 /* Draws each enabled 32-bit layer into the panel, scaled from canvas to panel with bilinear filtering. */
 extern "C" bool tulip_fb_muted;
+extern void tulip_display_power(bool on);
 
 void
 AppleCLCD::swap(const uint8_t *record)
@@ -451,6 +453,11 @@ IOMobileFramebufferUserClient::externalMethod(uint32_t selector, IOExternalMetho
 			fCallback[args->scalarInput[2]] = args->scalarInput[0];
 			fRefcon[args->scalarInput[2]] = args->scalarInput[1];
 			IOLockUnlock(fFB->fLock);
+		}
+		break;
+	case kSelRequestPowerChange:
+		if (args->scalarInputCount >= 1) {
+			tulip_display_power(args->scalarInput[0] != 0);
 		}
 		break;
 	case kSelSwapWait:

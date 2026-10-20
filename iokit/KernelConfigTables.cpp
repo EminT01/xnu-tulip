@@ -90,6 +90,11 @@ const char * gIOKernelConfigTables =
     "     'IONameMatch'     = 'qcom,spmi-pmic-arb';"
     "     'IOMatchCategory' = TulipBattery;"
     "   },"
+    "   {"
+    "     'IOClass'         = AppleARMBacklight;"
+    "     'IOProviderClass' = IOPlatformDevice;"
+    "     'IONameMatch'     = 'backlight';"
+    "   },"
 #endif
     "   {"
     "     'IOClass'         = IOPanicPlatform;"

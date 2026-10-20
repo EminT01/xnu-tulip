@@ -133,6 +133,8 @@ private:
 	static void poll(OSObject *owner, IOTimerEventSource *sender);
 };
 
+extern "C" bool tulip_display_on;
+
 OSDefineMetaClassAndStructors(TulipTouch, IOHIDEventService);
 
 /*
@@ -462,7 +464,7 @@ TulipTouch::report(const uint8_t *buf)
 		fX[i] = x[i];
 		fY[i] = y[i];
 	}
-	if (changed) {
+	if (changed && tulip_display_on) {
 		collection->setFixedValue(kIOHIDEventFieldDigitizerX, cx);
 		collection->setFixedValue(kIOHIDEventFieldDigitizerY, cy);
 		collection->setIntegerValue(kIOHIDEventFieldDigitizerRange, any);
