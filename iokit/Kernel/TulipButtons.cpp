@@ -6,11 +6,12 @@
 #include <IOKit/IOLib.h>
 #include <IOKit/IOMemoryDescriptor.h>
 #include <IOKit/IOTimerEventSource.h>
+#include <IOKit/IOInterruptEventSource.h>
 #include <IOKit/IOWorkLoop.h>
 #include <IOKit/hid/IOHIDEvent.h>
 #include <IOKit/hid/IOHIDUsageTables.h>
 #include "hid/include/IOHIDEventService.h"
-#include "TulipSPMI.h"
+#include "TulipSPMIInterrupts.h"
 
 extern "C" {
 #include <kern/clock.h>
@@ -24,6 +25,8 @@ extern "C" {
 /* PM660L GPIO 7 (SID 2): volume up, active low. Linux reads an input's level from RT_STS. */
 #define VOLUP_RT_STS       0xc610
 #define GPIO_LEVEL         (1u << 0)
+#define PON_BASE           0x800
+#define VOLUP_BASE         0xc600
 
 #define POLL_MS            20
 
@@ -54,9 +57,15 @@ protected:
 private:
 	TulipSPMI fSPMI;
 	IOTimerEventSource *fTimer;
+	IOInterruptEventSource *fInterrupt;
+	IONotifier *fNotifier;
+	volatile bool fInterrupts;
 	bool fDown[kKeys];
 
+	void update();
 	static void poll(OSObject *owner, IOTimerEventSource *sender);
+	static void interrupt(OSObject *owner, IOInterruptEventSource *sender, int count);
+	static bool published(void *target, void *refCon, IOService *service, IONotifier *notifier);
 };
 
 OSDefineMetaClassAndStructors(TulipButtons, IOHIDEventService);
@@ -73,37 +82,71 @@ TulipButtons::start(IOService *provider)
 	}
 	IOWorkLoop *wl = getWorkLoop();
 	fTimer = IOTimerEventSource::timerEventSource(this, &TulipButtons::poll);
-	if (!wl || !fTimer || wl->addEventSource(fTimer) != kIOReturnSuccess) {
+	fInterrupt = IOInterruptEventSource::interruptEventSource(this, &TulipButtons::interrupt);
+	if (!wl || !fTimer || !fInterrupt || wl->addEventSource(fTimer) != kIOReturnSuccess ||
+	    wl->addEventSource(fInterrupt) != kIOReturnSuccess) {
 		return false;
 	}
 	IOLog("TulipButtons: SPMI arbiter 0x%08x\n", fSPMI.version());
 	registerService();
 	fTimer->setTimeoutMS(POLL_MS);
+	fNotifier = addMatchingNotification(gIOFirstPublishNotification, serviceMatching("TulipSPMIInterrupts"),
+	    &TulipButtons::published, this);
 	return true;
+}
+
+bool
+TulipButtons::published(void *target, void *refCon __unused, IOService *service, IONotifier *notifier)
+{
+	TulipButtons *self = (TulipButtons *)target;
+	TulipSPMIInterrupts *pmic = OSDynamicCast(TulipSPMIInterrupts, service);
+	notifier->remove();
+	if (pmic && pmic->enable(0, PON_BASE, 0, kTulipPMICBoth, self->fInterrupt) &&
+	    pmic->enable(0, PON_BASE, 1, kTulipPMICBoth, self->fInterrupt) &&
+	    pmic->enable(2, VOLUP_BASE, 0, kTulipPMICBoth, self->fInterrupt)) {
+		self->fInterrupts = true;
+		self->fInterrupt->interruptOccurred(NULL, NULL, 0);
+		IOLog("TulipButtons: interrupts\n");
+	}
+	return true;
+}
+
+void
+TulipButtons::update()
+{
+	uint8_t pon, gpio;
+
+	if (fSPMI.read(0, PON_RT_STS, &pon) && fSPMI.read(2, VOLUP_RT_STS, &gpio)) {
+		bool down[kKeys] = {
+			(pon & PON_KPDPWR) != 0, !(gpio & GPIO_LEVEL), (pon & PON_RESIN) != 0,
+		};
+		for (int k = 0; k < kKeys; k++) {
+			if (down[k] == fDown[k]) {
+				continue;
+			}
+			fDown[k] = down[k];
+			kprintf("TulipButtons: %s %s\n", gKeyName[k], down[k] ? "down" : "up");
+			IOHIDEvent *event = IOHIDEvent::keyboardEvent(mach_absolute_time(), kHIDPage_Consumer, gKeyUsage[k], down[k]);
+			if (event) {
+				dispatchEvent(event);
+				event->release();
+			}
+		}
+	}
+}
+
+void
+TulipButtons::interrupt(OSObject *owner, IOInterruptEventSource *sender __unused, int count __unused)
+{
+	((TulipButtons *)owner)->update();
 }
 
 void
 TulipButtons::poll(OSObject *owner, IOTimerEventSource *sender)
 {
 	TulipButtons *self = (TulipButtons *)owner;
-	uint8_t pon, gpio;
-
-	if (self->fSPMI.read(0, PON_RT_STS, &pon) && self->fSPMI.read(2, VOLUP_RT_STS, &gpio)) {
-		bool down[kKeys] = {
-			(pon & PON_KPDPWR) != 0, !(gpio & GPIO_LEVEL), (pon & PON_RESIN) != 0,
-		};
-		for (int k = 0; k < kKeys; k++) {
-			if (down[k] == self->fDown[k]) {
-				continue;
-			}
-			self->fDown[k] = down[k];
-			kprintf("TulipButtons: %s %s\n", gKeyName[k], down[k] ? "down" : "up");
-			IOHIDEvent *event = IOHIDEvent::keyboardEvent(mach_absolute_time(), kHIDPage_Consumer, gKeyUsage[k], down[k]);
-			if (event) {
-				self->dispatchEvent(event);
-				event->release();
-			}
-		}
+	self->update();
+	if (!self->fInterrupts) {
+		sender->setTimeoutMS(POLL_MS);
 	}
-	sender->setTimeoutMS(POLL_MS);
 }
