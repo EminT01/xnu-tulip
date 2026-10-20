@@ -422,7 +422,7 @@ gpt_scan(const char *want, uint64_t *first_out, uint64_t *count_out)
 
 /* Read count transfers of nblocks from the start of userdata and print the time per phase. */
 static void
-emmc_benchmark(uint32_t count, uint32_t nblocks)
+emmc_benchmark(const char *what, uint32_t count, uint32_t nblocks, bool ext_csd)
 {
 	const uint64_t lba = 14417920;
 	uint64_t ns[4], total;
@@ -430,7 +430,8 @@ emmc_benchmark(uint32_t count, uint32_t nblocks)
 	bzero(emmc_phase_time, sizeof(emmc_phase_time));
 	uint64_t start = mach_absolute_time();
 	for (uint32_t i = 0; i < count; i++) {
-		if (emmc_read(lba + (uint64_t)i * nblocks, nblocks) != 0) {
+		int err = ext_csd ? emmc_xfer(false, MMC_SEND_EXT_CSD, 0, 1) : emmc_read(lba + (uint64_t)i * nblocks, nblocks);
+		if (err != 0) {
 			printf("tulip_emmc: benchmark read %u failed\n", i);
 			return;
 		}
@@ -439,8 +440,8 @@ emmc_benchmark(uint32_t count, uint32_t nblocks)
 	for (int i = 0; i < 4; i++) {
 		absolutetime_to_nanoseconds(emmc_phase_time[i], &ns[i]);
 	}
-	printf("tulip_emmc: %u x %u KiB in %llu ms (%llu KiB/s); per read us: setup %llu, command %llu, data %llu, finish %llu\n",
-	    count, nblocks / 2, total / NSEC_PER_MSEC, (uint64_t)count * nblocks / 2 * NSEC_PER_SEC / MAX(total, 1),
+	printf("tulip_emmc: %s: %u x %u KiB in %llu ms (%llu KiB/s); per read us: setup %llu, command %llu, data %llu, finish %llu\n",
+	    what, count, nblocks / 2, total / NSEC_PER_MSEC, (uint64_t)count * nblocks / 2 * NSEC_PER_SEC / MAX(total, 1),
 	    ns[0] / count / 1000, ns[1] / count / 1000, ns[2] / count / 1000, ns[3] / count / 1000);
 }
 
@@ -453,6 +454,11 @@ tulip_emmc_probe(void)
 	printf("tulip_emmc: present 0x%08x hostctl 0x%08x clock 0x%08x hostctl2 0x%08x caps 0x%08x\n",
 	    hc_read32(SDHCI_PRESENT_STATE), hc_read32(SDHCI_HOST_CONTROL), hc_read32(SDHCI_CLOCK_CONTROL),
 	    hc_read32(SDHCI_HOST_CONTROL2), hc_read32(SDHCI_CAPABILITIES));
+	uint32_t clk = hc_read32(SDHCI_CLOCK_CONTROL);
+	uint32_t div = (clk >> 8 & 0xff) | (clk >> 6 & 3) << 8;
+	/* sdhci-msm v5 vendor registers in the host block: VENDOR_SPEC (card clock = MCLK or MCLK/2) and the core version. */
+	printf("tulip_emmc: sdclk divider %u (card clock = base / %u), vendor_spec 0x%08x, mci_version 0x%08x\n",
+	    div, div ? 2 * div : 1, hc_read32(0x20c), hc_read32(0x318));
 	vm_offset_t rcg = ml_io_map(trunc_page(GCC_SDCC1_APPS_RCG), PAGE_SIZE);
 	if (rcg) {
 		volatile uint32_t *r = (volatile uint32_t *)(rcg + (GCC_SDCC1_APPS_RCG & PAGE_MASK));
@@ -465,8 +471,18 @@ tulip_emmc_probe(void)
 		printf("tulip_emmc: ext_csd rev %u bus_width 0x%x hs_timing 0x%x device_type 0x%x strobe %u\n",
 		    ext[192], ext[183], ext[185], ext[196], ext[184]);
 	}
-	emmc_benchmark(100, 1);
-	emmc_benchmark(64, BOUNCE_SIZE / SECTOR);
+	printf("tulip_emmc: dll_config 0x%08x dll_status 0x%08x vendor_spec3 0x%08x\n",
+	    hc_read32(0x200), hc_read32(0x208), hc_read32(0x250));
+	if (emmc_xfer(false, MMC_SEND_EXT_CSD, 0, 1) == 0) {
+		const uint8_t *ext = emmc_dma.data;
+		printf("tulip_emmc: ext_csd cache_ctrl %u cache_size %u KiB power_off_notification %u power_class %u "
+		    "pwr_cl_200 0x%x/0x%x bkops_en %u bkops_status %u sector_size %u\n",
+		    ext[33], (ext[249] | ext[250] << 8 | ext[251] << 16 | (uint32_t)ext[252] << 24) / 2, ext[34], ext[187],
+		    ext[236], ext[237], ext[163], ext[246], ext[61]);
+	}
+	emmc_benchmark("cmd8", 20, 1, true);
+	emmc_benchmark("read", 100, 1, false);
+	emmc_benchmark("read 1M", 16, BOUNCE_SIZE / SECTOR, false);
 	gpt_scan(NULL, NULL, NULL);
 }
 
