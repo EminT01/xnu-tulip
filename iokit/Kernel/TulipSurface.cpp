@@ -31,6 +31,11 @@ extern "C" {
 #define DESC_PLANE_STRIDE   0x80
 #define STATE_SIZE          PAGE_SIZE
 #define STATE_SEED          0xc
+#define STATE_YCBCR_MATRIX  0x24
+#define STATE_ATTACHMENTS   0x30
+#define ATTACHMENTS_SIZE    0x70
+#define ATTACHMENTS_ID      0x80
+#define PURGEABLE_KEEP      3
 #define STATE_VALUES_GEN    0x20
 #define STATE_VALUES_SIZE   0x28
 #define STATE_TIMESTAMPS    0x800
@@ -46,10 +51,13 @@ extern "C" {
 enum {
 	kSelCreate = 0,            /* scalar [parent id], struct in = serialized properties */
 	kSelLookup = 4,            /* scalar [id] */
+	kSelSetYCbCrMatrix = 5,    /* scalars [id, matrix] */
 	kSelSetValue = 9,          /* u32 id, u32 pad, serialized [value, key] or dictionary */
 	kSelCopyValues = 0xa,      /* out: u32 reserved, u32 generation, serialized values */
 	kSelRemoveValue = 0xb,     /* u32 id, u32 pad, key (empty: all) */
 	kSelLimits = 13,           /* out 0x18 bytes; u16 at +0x16 is the ABI version, 1 */
+	kSelSetPurgeable = 20,     /* scalars [id, state] -> [old state] */
+	kSelSetAttachments = 27,   /* struct: 0x70 bytes of colour attachments, u64 size, u64 mask, u32 id */
 	kSelLookupFromPort = 0x22, /* scalar [port name] */
 	kSelCreatePort = 0x23,     /* scalars [id, options] -> scalar [port name] */
 };
@@ -849,6 +857,44 @@ IOSurfaceRootUserClient::externalMethod(uint32_t selector, IOExternalMethodArgum
 		}
 		args->scalarOutput[0] = tulip_surface_port(s, fTask);
 		args->scalarOutputCount = 1;
+		s->release();
+		return kIOReturnSuccess;
+	}
+	case kSelSetYCbCrMatrix:
+	case kSelSetPurgeable: {
+		if (args->scalarInputCount < 2) {
+			return kIOReturnBadArgument;
+		}
+		TulipSurface *s = heldSurface((uint32_t)args->scalarInput[0]);
+		if (!s) {
+			return kIOReturnNotFound;
+		}
+		uint32_t value = (uint32_t)args->scalarInput[1];
+		if (selector == kSelSetYCbCrMatrix) {
+			put32((uint8_t *)s->state->getBytesNoCopy(), STATE_YCBCR_MATRIX, value);
+		} else {
+			if (args->scalarOutputCount >= 1) {
+				args->scalarOutput[0] = s->purgeable;
+				args->scalarOutputCount = 1;
+			}
+			if (value != PURGEABLE_KEEP) {
+				s->purgeable = value;
+			}
+		}
+		s->release();
+		return kIOReturnSuccess;
+	}
+	case kSelSetAttachments: {
+		uint32_t id;
+		if (args->structureInputSize < ATTACHMENTS_ID + sizeof(id)) {
+			return kIOReturnBadArgument;
+		}
+		memcpy(&id, (const uint8_t *)args->structureInput + ATTACHMENTS_ID, sizeof(id));
+		TulipSurface *s = heldSurface(id);
+		if (!s) {
+			return kIOReturnNotFound;
+		}
+		memcpy((uint8_t *)s->state->getBytesNoCopy() + STATE_ATTACHMENTS, args->structureInput, ATTACHMENTS_SIZE);
 		s->release();
 		return kIOReturnSuccess;
 	}

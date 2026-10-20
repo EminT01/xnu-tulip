@@ -30,6 +30,7 @@ public:
 	uint16_t bytesPerElement;
 	uint8_t  elementWidth, elementHeight;
 	uint32_t planeCount;
+	uint32_t purgeable;
 	TulipSurfacePlane planes[TULIP_SURFACE_MAX_PLANES];
 
 	IOMemoryDescriptor *data;
