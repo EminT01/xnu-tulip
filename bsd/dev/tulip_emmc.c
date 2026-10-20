@@ -31,6 +31,8 @@ dev_t tulip_emmc_rootdev(void);
 
 #define SDHC1_HC_BASE           0x0c0c4000UL
 #define SDHC1_CQE_BASE          0x0c0c5000UL
+/* SDCC1 apps clock RCG in GCC: CMD, CFG (source in bits 8-10, half-integer divider in 0-4), M, N, D. */
+#define GCC_SDCC1_APPS_RCG      0x0011602cUL
 #define SECTOR                  512
 #define BOUNCE_SIZE             (64 * 1024)
 #define DESC_LEN                (16 * 1024)
@@ -415,6 +417,13 @@ tulip_emmc_probe(void)
 	printf("tulip_emmc: present 0x%08x hostctl 0x%08x clock 0x%08x hostctl2 0x%08x caps 0x%08x\n",
 	    hc_read32(SDHCI_PRESENT_STATE), hc_read32(SDHCI_HOST_CONTROL), hc_read32(SDHCI_CLOCK_CONTROL),
 	    hc_read32(SDHCI_HOST_CONTROL2), hc_read32(SDHCI_CAPABILITIES));
+	vm_offset_t rcg = ml_io_map(trunc_page(GCC_SDCC1_APPS_RCG), PAGE_SIZE);
+	if (rcg) {
+		volatile uint32_t *r = (volatile uint32_t *)(rcg + (GCC_SDCC1_APPS_RCG & PAGE_MASK));
+		uint32_t cfg = r[1];
+		printf("tulip_emmc: sdcc1 rcg cmd 0x%08x cfg 0x%08x (source %u, divider %u.%u) m 0x%x n 0x%x d 0x%x\n",
+		    r[0], cfg, (cfg >> 8) & 7, ((cfg & 0x1f) + 1) / 2, (cfg & 0x1f) % 2 ? 0 : 5, r[2], r[3], r[4]);
+	}
 	gpt_scan(NULL, NULL, NULL);
 }
 
