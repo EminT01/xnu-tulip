@@ -588,6 +588,25 @@ tulip_emmc_ioctl(__unused dev_t dev, u_long cmd, caddr_t data, __unused int flag
 	case DKIOCGETMAXSEGMENTCOUNTWRITE:
 		*(uint64_t *)data = 32;
 		return 0;
+	case DKIOCGETMAXBYTECOUNTREAD:
+	case DKIOCGETMAXBYTECOUNTWRITE:
+	case DKIOCGETMAXSEGMENTBYTECOUNTREAD:
+	case DKIOCGETMAXSEGMENTBYTECOUNTWRITE:
+		*(uint64_t *)data = BOUNCE_SIZE;
+		return 0;
+	case DKIOCGETMINSEGMENTALIGNMENTBYTECOUNT:
+		*(uint64_t *)data = 4;
+		return 0;
+	case DKIOCGETFEATURES:
+		*(uint32_t *)data = 0;
+		return 0;
+	/* vfs_init_io_attributes scales read-ahead with the queue depth; each command costs the card about 1.7 ms. */
+	case DKIOCGETCOMMANDPOOLSIZE:
+		*(uint32_t *)data = 128;
+		return 0;
+	case DKIOCISSOLIDSTATE:
+		*(uint32_t *)data = 1;
+		return 0;
 	case DKIOCSYNCHRONIZE: {
 		lck_mtx_lock(&emmc_mtx);
 		int error = emmc_flush();
