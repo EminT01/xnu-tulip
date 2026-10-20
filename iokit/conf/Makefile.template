@@ -68,6 +68,7 @@ IOHibernateIO.cpo_CXXWARNFLAGS_ADD += -Wno-cast-align
 hfs_iokit.cpo_INCFLAGS = -I$(SRCROOT)/bsd/hfs/core -I$(SRCROOT)/bsd/hfs
 hfs_iokit.cpo_CFLAGS_ADD += -include $(SRCROOT)/bsd/hfs/tulip_hfs_config.h -DPRIVATE=1
 hfs_iokit.cpo_CFLAGS_RM = -DXNU_KERNEL_PRIVATE -DIOKIT_KERNEL_PRIVATE -DCONFIG_PROTECT
+TulipButtons.cpo_CFLAGS_ADD += -I$(SRCROOT)/iokit/Kernel/hid/include -I$(SRCROOT)/iokit/Kernel/hid/include/IOKit/hidsystem
 IOHIDEventService.cpo_CFLAGS_ADD += -I$(SRCROOT)/iokit/Kernel/hid/include -I$(SRCROOT)/iokit/Kernel/hid/include/IOKit/hidsystem
 IOHIDEvent.cpo_CFLAGS_ADD += -I$(SRCROOT)/iokit/Kernel/hid/include -I$(SRCROOT)/iokit/Kernel/hid/include/IOKit/hidsystem
 IOHIDEventServiceQueue.cpo_CFLAGS_ADD += -I$(SRCROOT)/iokit/Kernel/hid/include -I$(SRCROOT)/iokit/Kernel/hid/include/IOKit/hidsystem

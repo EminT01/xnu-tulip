@@ -69,6 +69,11 @@ const char * gIOKernelConfigTables =
     "     'IOProviderClass' = IOPlatformDevice;"
     "     'IONameMatch'     = 'tulip,display';"
     "   },"
+    "   {"
+    "     'IOClass'         = TulipButtons;"
+    "     'IOProviderClass' = IOPlatformDevice;"
+    "     'IONameMatch'     = 'qcom,spmi-pmic-arb';"
+    "   },"
 #endif
     "   {"
     "     'IOClass'         = IOPanicPlatform;"
