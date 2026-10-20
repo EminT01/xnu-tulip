@@ -36,6 +36,13 @@
 #define FG_SOC_INT_RT_STS       0x4010
 #define FG_SOC_EN_CTL           0x4046
 #define FG_BATT_TEMP            0x4150
+#define PM660L_SID              2
+#define PON_TYPE                0x804
+#define PON_GEN2_PRIMARY        4
+#define PON_GEN2_SECONDARY      5
+#define PON_REASON1             0x8c0
+#define PON_OFF_POFF            (1u << 7)
+#define PON_OFF_FAULT           (1u << 6)
 #define FG_INFO_INT_RT_STS      0x4110
 #define FG_VBATT                0x41a0
 
@@ -77,6 +84,7 @@ private:
 	bool readU16(uint16_t addr, uint16_t *value);
 	bool readPercent(uint32_t *percent);
 	void logState();
+	void logResetReasons(uint8_t sid);
 	void update();
 
 	static void poll(OSObject *owner, IOTimerEventSource *sender);
@@ -259,6 +267,46 @@ TulipBattery::poll(OSObject *owner, IOTimerEventSource *sender)
 	sender->setTimeoutMS(POLL_MS);
 }
 
+/* Why the PMIC last powered off or reset, kept across the reset (Linux drivers/input/misc/qpnp-power-on.c, gen2). */
+void
+TulipBattery::logResetReasons(uint8_t sid)
+{
+	static const char *const onNames[8] = { "hard reset", "SMPL", "RTC", "DC", "USB", "PON1", "CBL", "power key" };
+	static const char *const offNames[8] = { "soft", "PS_HOLD", "PMIC watchdog", "GP1", "GP2", "power+volume down",
+		                                     "volume down", "power key" };
+	static const char *const faultNames[16] = { "GP0", "GP1", "GP2", "GP3", "MBG", "OVLO", "UVLO", "AVDD_RB", NULL, NULL,
+		                                        NULL, "FAULT_N", "PBS watchdog", "PBS NACK", "restart PON", "OTST3" };
+	uint8_t id[4] = {}, on[4] = {}, off[4] = {}, fault[4] = {};
+	bool ok = fSPMI.read(sid, PON_TYPE, id, 4) && fSPMI.read(sid, PON_REASON1, on, 4) &&
+	    fSPMI.read(sid, PON_REASON1 + 4, off, 4) && fSPMI.read(sid, PON_REASON1 + 8, fault, 4);
+	IOLog("TulipBattery: PMIC %u PON 804=%02x %02x %02x %02x 8c0=%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x%s\n",
+	    sid, id[0], id[1], id[2], id[3], on[0], on[1], on[2], on[3], off[0], off[1], off[2], off[3], fault[0], fault[1],
+	    fault[2], fault[3], ok ? "" : " (read failed)");
+	if (!ok || (id[1] != PON_GEN2_PRIMARY && id[1] != PON_GEN2_SECONDARY)) {
+		return;
+	}
+	char line[256];
+	size_t len = (size_t)snprintf(line, sizeof(line), "TulipBattery: PMIC %u on 0x%02x warm 0x%02x off 0x%02x poff 0x%02x "
+	    "fault 0x%02x%02x s3 0x%02x soft 0x%02x:", sid, on[0], on[2], off[3], off[0], fault[1], fault[0], fault[2], fault[3]);
+	for (int i = 0; i < 8 && len < sizeof(line); i++) {
+		if (on[0] & (1u << i)) {
+			len += (size_t)snprintf(line + len, sizeof(line) - len, " on:%s", onNames[i]);
+		}
+	}
+	for (int i = 0; i < 8 && len < sizeof(line) && (off[3] & PON_OFF_POFF); i++) {
+		if (off[0] & (1u << i)) {
+			len += (size_t)snprintf(line + len, sizeof(line) - len, " off:%s", offNames[i]);
+		}
+	}
+	uint16_t faults = (uint16_t)(fault[1] << 8 | fault[0]);
+	for (int i = 0; i < 16 && len < sizeof(line) && (off[3] & PON_OFF_FAULT); i++) {
+		if ((faults & (1u << i)) && faultNames[i]) {
+			len += (size_t)snprintf(line + len, sizeof(line) - len, " fault:%s", faultNames[i]);
+		}
+	}
+	IOLog("%s\n", line);
+}
+
 bool
 TulipBattery::start(IOService *provider)
 {
@@ -273,6 +321,8 @@ TulipBattery::start(IOService *provider)
 	if (readU8(FG_SOC_EN_CTL, &en) && !(en & FG_ALGORITHM_EN)) {
 		IOLog("TulipBattery: fuel gauge algorithm is off, SOC may be stale\n");
 	}
+	logResetReasons(PM660_SID);
+	logResetReasons(PM660L_SID);
 	setMaxCapacity(CAPACITY_MAH);
 	setExternalChargeCapable(true);
 	setCycleCount(0);
