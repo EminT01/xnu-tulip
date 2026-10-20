@@ -34,7 +34,7 @@ dev_t tulip_emmc_rootdev(void);
 /* SDCC1 apps clock RCG in GCC: CMD, CFG (source in bits 8-10, half-integer divider in 0-4), M, N, D. */
 #define GCC_SDCC1_APPS_RCG      0x0011602cUL
 #define SECTOR                  512
-#define BOUNCE_SIZE             (64 * 1024)
+#define BOUNCE_SIZE             (1024 * 1024)
 #define DESC_LEN                (16 * 1024)
 #define NDESC                   (BOUNCE_SIZE / DESC_LEN)
 
@@ -466,7 +466,7 @@ tulip_emmc_probe(void)
 		    ext[192], ext[183], ext[185], ext[196], ext[184]);
 	}
 	emmc_benchmark(100, 1);
-	emmc_benchmark(1024, BOUNCE_SIZE / SECTOR);
+	emmc_benchmark(64, BOUNCE_SIZE / SECTOR);
 	gpt_scan(NULL, NULL, NULL);
 }
 
