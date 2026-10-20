@@ -10,6 +10,7 @@
 
 extern "C" {
 #include <kern/clock.h>
+#include <kern/sched_prim.h>
 }
 
 /* Qualcomm QUP v2 in I2C mode, FIFO mode with v2 tags (Linux drivers/i2c/busses/i2c-qup.c). */
@@ -38,6 +39,8 @@ extern "C" {
 #define QUP_STATE_I2C_MAST_GEN  (1u << 4)
 #define QUP_OP_OUT_NOT_EMPTY    (1u << 4)
 #define QUP_OP_IN_NOT_EMPTY     (1u << 5)
+#define QUP_OP_OUT_SVC          (1u << 8)
+#define QUP_OP_IN_SVC           (1u << 9)
 #define QUP_CONFIG_I2C          (2u << 8 | 7)
 #define QUP_IO_MODE_REPACK      (3u << 14)
 #define QUP_V2_TAGS_EN          1
@@ -56,6 +59,8 @@ extern "C" {
 #define QUP_CLK_CTL_400K        (14u << 16 | 3u << 8 | 28u)
 
 #define TRANSFER_MS             20
+/* Longest sleep between checks, in case an interrupt does not come. */
+#define SLEEP_US                2000
 
 OSDefineMetaClassAndStructors(TulipI2C, IOService);
 
@@ -198,6 +203,8 @@ TulipI2C::transfer(uint8_t addr, const uint8_t *wbuf, uint32_t wlen, uint8_t *rb
 			for (int j = 0; j < 4 && got < rx; j++, word >>= 8) {
 				fRx[got++] = (uint8_t)word;
 			}
+		} else {
+			waitInterrupt(got == rx);
 		}
 	}
 	for (int i = 0; ok && i < 1000 && (*reg(QUP_I2C_STATUS) & I2C_STATUS_BUS_ACTIVE); i++) {
@@ -209,6 +216,30 @@ TulipI2C::transfer(uint8_t addr, const uint8_t *wbuf, uint32_t wlen, uint8_t *rb
 	}
 	IOLockUnlock(fLock);
 	return ok;
+}
+
+void
+TulipI2C::waitInterrupt(bool readDone)
+{
+	if (!fInterrupts) {
+		return;
+	}
+	*reg(QUP_OPERATIONAL) = QUP_OP_OUT_SVC | QUP_OP_IN_SVC;
+	uint32_t op = *reg(QUP_OPERATIONAL);
+	if ((op & QUP_OP_IN_NOT_EMPTY) || (readDone && !(op & QUP_OP_OUT_NOT_EMPTY)) ||
+	    (*reg(QUP_I2C_STATUS) & I2C_STATUS_ERROR_MASK) || (*reg(QUP_ERROR_FLAGS) & QUP_ERROR_MASK)) {
+		return;
+	}
+	assert_wait_timeout((event_t)this, THREAD_UNINT, SLEEP_US, NSEC_PER_USEC);
+	getProvider()->enableInterrupt(0);
+	thread_block(THREAD_CONTINUE_NULL);
+}
+
+void
+TulipI2C::interrupt(void *refCon __unused, IOService *nub, int source)
+{
+	nub->disableInterrupt(source);
+	thread_wakeup((event_t)this);
 }
 
 bool
@@ -253,8 +284,18 @@ TulipI2C::start(IOService *provider)
 		IOLog("TulipI2C: %s does not start\n", provider->getName());
 		return false;
 	}
+	/* Registering waits for the GIC driver, so only try once it runs. */
+	OSDictionary *matching = serviceMatching("TulipGIC");
+	IOService *gic = matching ? waitForMatchingService(matching, 5 * NSEC_PER_SEC) : NULL;
+	OSSafeReleaseNULL(matching);
+	if (gic && provider->getProperty(gIOInterruptControllersKey)) {
+		fInterrupts = provider->registerInterrupt(0, this,
+		    OSMemberFunctionCast(IOInterruptAction, this, &TulipI2C::interrupt)) == kIOReturnSuccess;
+	}
+	OSSafeReleaseNULL(gic);
 	setName(provider->getName());
-	IOLog("TulipI2C: %s, QUP version 0x%08x\n", getName(), *reg(QUP_HW_VERSION));
+	IOLog("TulipI2C: %s, QUP version 0x%08x, %s\n", getName(), *reg(QUP_HW_VERSION),
+	    fInterrupts ? "interrupts" : "polling");
 	registerService();
 	return true;
 }

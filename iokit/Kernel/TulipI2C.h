@@ -32,11 +32,14 @@ private:
 	IOMemoryMap *fMap;
 	IOLock *fLock;
 	uint8_t fRx[2 + TULIP_I2C_MAX_READ];
+	bool fInterrupts;
 
 	volatile uint32_t *reg(uint32_t offset);
 	bool qupState(uint32_t state);
 	bool setState(uint32_t state);
 	bool powerOn(IOService *provider);
+	void waitInterrupt(bool readDone);
+	void interrupt(void *refCon, IOService *nub, int source);
 };
 
 #endif /* _IOKIT_TULIPI2C_H */
