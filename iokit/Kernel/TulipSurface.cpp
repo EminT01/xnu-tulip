@@ -600,7 +600,7 @@ IOSurfaceRootUserClient::describe(TulipSurface *s, IOExternalMethodArguments *ar
 		uint8_t *p = out + DESC_PLANES + i * DESC_PLANE_STRIDE;
 		put32(p, 0x00, s->planes[i].width);
 		put32(p, 0x04, s->planes[i].height);
-		put32(p, 0x08, s->planes[i].bytesPerRow);
+		put32(p, 0x10, s->planes[i].bytesPerRow);
 		put32(p, 0x0c, s->planes[i].offset);
 		put32(p, 0x14, s->planes[i].size);
 		memcpy(p + 0x18, &s->planes[i].bytesPerElement, sizeof(s->planes[i].bytesPerElement));
