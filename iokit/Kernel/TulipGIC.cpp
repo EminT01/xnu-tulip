@@ -61,11 +61,16 @@ private:
 	void setBit(uint32_t base, uint32_t intid);
 	void configure(uint32_t intid, int type);
 	void selfTest(uint32_t intid);
+	bool install(uint32_t intid, bool edge, void (*handler)(void *arg), void *arg);
+	static void directHandler(void *target, void *refCon, void *nub, int source);
+	friend bool tulip_gic_install(uint32_t intid, bool edge, void (*handler)(void *arg), void *arg);
 	static void dispatch(void *target, uint32_t intid);
 	static void testHandler(void *target, void *refCon, void *nub, int source);
 };
 
 OSDefineMetaClassAndStructors(TulipGIC, IOInterruptController);
+
+static TulipGIC *gTulipGIC;
 
 static int
 triggerType(IOService *nub, int source)
@@ -187,6 +192,43 @@ TulipGIC::testHandler(void *target, void *refCon __unused, void *nub __unused, i
 	((TulipGIC *)target)->fTestHits++;
 }
 
+void
+TulipGIC::directHandler(void *target, void *refCon, void *nub __unused, int source __unused)
+{
+	((void (*)(void *))refCon)(target);
+}
+
+bool
+TulipGIC::install(uint32_t intid, bool edge, void (*handler)(void *arg), void *arg)
+{
+	if (intid < FIRST_SPI || intid >= fLines) {
+		return false;
+	}
+	IOInterruptVector *vector = &vectors[intid];
+	IOLockLock(vector->interruptLock);
+	bool ok = !vector->interruptRegistered;
+	if (ok) {
+		configure(intid, edge ? kIOInterruptTypeEdge : kIOInterruptTypeLevel);
+		vector->handler = &TulipGIC::directHandler;
+		vector->target = arg;
+		vector->refCon = (void *)handler;
+		vector->interruptDisabledSoft = 0;
+		vector->interruptDisabledHard = 0;
+		vector->interruptRegistered = 1;
+		OSSynchronizeIO();
+		enableVector(intid, vector);
+	}
+	IOLockUnlock(vector->interruptLock);
+	return ok;
+}
+
+bool
+tulip_gic_install(uint32_t intid, bool edge, void (*handler)(void *arg), void *arg)
+{
+	TulipGIC *gic = gTulipGIC;
+	return gic && gic->install(intid, edge, handler, arg);
+}
+
 /* Raises an SPI by software and checks that it arrives, so a missing route shows in the log. */
 void
 TulipGIC::selfTest(uint32_t intid)
@@ -264,6 +306,8 @@ TulipGIC::start(IOService *provider)
 	}
 	getPlatform()->registerInterruptController(const_cast<OSSymbol *>(name), this);
 	name->release();
+	OSMemoryBarrier();
+	gTulipGIC = this;
 	IOLog("TulipGIC: %u interrupt lines, SPIs to CPU 0x%llx\n", fLines, fRoute);
 	registerService();
 	return true;

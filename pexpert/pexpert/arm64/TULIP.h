@@ -55,6 +55,7 @@
 
 #ifndef ASSEMBLER
 #include <stdint.h>
+#include <stdbool.h>
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -68,6 +69,8 @@ void tulip_gic_send_ipi(uint32_t mpidr);
 /* Handler for every interrupt other than the timer and the IPI; set by TulipGIC. */
 extern void (*tulip_irq_handler)(void *target, uint32_t intid);
 extern void *tulip_irq_target;
+/* Direct SPI handlers for drivers outside IOKit; false until TulipGIC runs. The handler must quiet its device. */
+bool tulip_gic_install(uint32_t intid, bool edge, void (*handler)(void *arg), void *arg);
 #ifdef __cplusplus
 }
 #endif
