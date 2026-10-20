@@ -655,7 +655,7 @@ IOService::initialize( void )
 	gIOStopList            = OSArray::withCapacity( 16 );
 	gIOStopProviderList    = OSArray::withCapacity( 16 );
 	gIOFinalizeList        = OSArray::withCapacity( 16 );
-#if !NO_KEXTD
+#if !NO_KEXTD && !CONFIG_TULIP
 	if (OSKext::iokitDaemonAvailable()) {
 		gIOMatchDeferList      = OSArray::withCapacity( 16 );
 	} else {
@@ -1611,7 +1611,7 @@ IOService::setPMRootDomain( class IOPMrootDomain * rootDomain)
 {
 	gIOPMRootDomain = rootDomain;
 	publishResource(gIOResourceIOKitKey);
-#if NO_KEXTD
+#if NO_KEXTD || CONFIG_TULIP
 	// Publish IOUserResources now since there is no IOKit daemon.
 	publishUserResource(gIOResourceIOKitKey);
 #endif
@@ -4276,7 +4276,7 @@ IOService::userSpaceWillReboot()
 	OSIterator * iter;
 
 	// Recreate the defer list if it does not exist
-	if (!gIOMatchDeferList && OSKext::iokitDaemonAvailable()) {
+	if (!gIOMatchDeferList && OSKext::iokitDaemonAvailable() && !CONFIG_TULIP) {
 		gIOMatchDeferList = OSArray::withCapacity( 16 );
 	}
 

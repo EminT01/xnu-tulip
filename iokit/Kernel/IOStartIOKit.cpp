@@ -187,7 +187,7 @@ StartIOKitMatching(void)
 		panic("Failed to start IOService matching");
 	}
 
-#if !NO_KEXTD
+#if !NO_KEXTD && !CONFIG_TULIP
 	if (OSKext::iokitDaemonAvailable()) {
 		/* Add a busy count to keep the registry busy until the IOKit daemon has
 		 * completely finished launching. This is decremented when the IOKit daemon
