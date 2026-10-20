@@ -88,6 +88,7 @@ iokit/Kernel/TulipFramebuffer.cpp			optional iokitcpp config_tulip
 iokit/Kernel/TulipButtons.cpp			optional iokitcpp config_tulip
 iokit/Kernel/TulipTouch.cpp			optional iokitcpp config_tulip
 iokit/Kernel/TulipCPUClock.cpp			optional iokitcpp config_tulip
+iokit/Kernel/TulipBattery.cpp			optional iokitcpp config_tulip
 iokit/Kernel/hid/IOHIDEventService.cpp			optional iokitcpp config_tulip
 iokit/Kernel/hid/IOHIDFamily/IOHIDEvent.cpp			optional iokitcpp config_tulip
 iokit/Kernel/hid/IOHIDFamily/IOHIDEventServiceQueue.cpp			optional iokitcpp config_tulip

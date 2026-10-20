@@ -84,6 +84,11 @@ const char * gIOKernelConfigTables =
     "     'IOProviderClass' = IOPlatformDevice;"
     "     'IONameMatch'     = 'qcom,sdm660-cpu-clock';"
     "   },"
+    "   {"
+    "     'IOClass'         = TulipBattery;"
+    "     'IOProviderClass' = IOResources;"
+    "     'IOMatchCategory' = TulipBattery;"
+    "   },"
 #endif
     "   {"
     "     'IOClass'         = IOPanicPlatform;"
