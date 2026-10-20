@@ -66,7 +66,7 @@ static const struct {
 	{ 0x5b, 868 },  /* 1747.2 MHz */
 };
 
-/* Gold cluster clock: logs the state that the bootloader leaves, and with tulip_gold_l=L runs the Gold PLL at L. */
+/* Gold cluster clock: logs the state that the bootloader leaves and runs the Gold PLL at tulip_gold_l (default 0x5b). */
 class TulipCPUClock : public IOService
 {
 	OSDeclareDefaultStructors(TulipCPUClock);
@@ -217,8 +217,10 @@ TulipCPUClock::start(IOService *provider)
 		IOLog("%s\n", line);
 	}
 
-	uint32_t l = 0;
-	if (PE_parse_boot_argn("tulip_gold_l", &l, sizeof(l)) && l) {
+	/* 1747.2 MHz unless tulip_gold_l says otherwise (0: keep ABL's 600 MHz). */
+	uint32_t l = 0x5b;
+	PE_parse_boot_argn("tulip_gold_l", &l, sizeof(l));
+	if (l) {
 		IOLog("TulipCPUClock: %llu MHz before\n", tulip_cpu_mhz());
 		setGoldL(l);
 		IOLog("TulipCPUClock: %llu MHz after\n", tulip_cpu_mhz());
