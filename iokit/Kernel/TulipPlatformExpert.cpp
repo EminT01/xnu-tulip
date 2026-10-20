@@ -23,6 +23,7 @@ public:
 	virtual bool start(IOService * provider) APPLE_KEXT_OVERRIDE;
 	virtual long getGMTTimeOfDay(void) APPLE_KEXT_OVERRIDE;
 	virtual void processTopLevel(IORegistryEntry *root) APPLE_KEXT_OVERRIDE;
+	virtual int haltRestart(unsigned int type) APPLE_KEXT_OVERRIDE;
 
 private:
 	uint64_t bootUTC;
@@ -31,6 +32,10 @@ private:
 OSDefineMetaClassAndStructors(TulipPlatformExpert, IODTPlatformExpert);
 
 extern void tulip_cpu_init(void);
+extern int64_t tulip_psci_call(uint64_t fn, uint64_t a1, uint64_t a2, uint64_t a3);
+
+#define PSCI_SYSTEM_OFF   0x84000008u
+#define PSCI_SYSTEM_RESET 0x84000009u
 extern "C" uint64_t tulip_emmc_stats[4];
 
 /* CPU clock in MHz: PMU cycles over 10 ms of timer time. */
@@ -104,6 +109,23 @@ tulip_tick_thread(void *arg __unused, wait_result_t wr __unused)
 		kprintf("tick %u\n", n);
 		tulip_gic_report();
 	}
+}
+
+/* Restart and power off through PSCI; a panic restart keeps the panic on screen. */
+int
+TulipPlatformExpert::haltRestart(unsigned int type)
+{
+	switch (type) {
+	case kPERestartCPU:
+		tulip_psci_call(PSCI_SYSTEM_RESET, 0, 0, 0);
+		break;
+	case kPEHaltCPU:
+		tulip_psci_call(PSCI_SYSTEM_OFF, 0, 0, 0);
+		break;
+	default:
+		break;
+	}
+	return IODTPlatformExpert::haltRestart(type);
 }
 
 long

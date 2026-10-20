@@ -57,7 +57,9 @@ tulip_cpu_init(void)
 	}
 }
 
-static int64_t
+int64_t tulip_psci_call(uint64_t fn, uint64_t a1, uint64_t a2, uint64_t a3);
+
+int64_t
 tulip_psci_call(uint64_t fn, uint64_t a1, uint64_t a2, uint64_t a3)
 {
 	register uint64_t x0 asm("x0") = fn;
