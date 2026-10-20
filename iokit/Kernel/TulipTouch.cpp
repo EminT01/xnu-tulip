@@ -119,7 +119,7 @@ private:
 	IOTimerEventSource *fTimer;
 	uint32_t fWidth, fHeight;
 	uint32_t fCanvasWidth, fCanvasHeight;
-	int32_t fOriginX, fOriginY;
+	int32_t fOutX, fOutY, fOutWidth, fOutHeight;
 	bool fDown[NVT_MAX_TOUCHES];
 	IOFixed fX[NVT_MAX_TOUCHES], fY[NVT_MAX_TOUCHES];
 
@@ -133,6 +133,14 @@ private:
 };
 
 OSDefineMetaClassAndStructors(TulipTouch, IOHIDEventService);
+
+/* pos / size as a 16.16 fraction, clamped to [0, 1). */
+static IOFixed
+unitFixed(int32_t pos, int32_t size)
+{
+	int64_t v = ((int64_t)pos << 16) / size;
+	return (IOFixed)(v < 0 ? 0 : (v > 0xffff ? 0xffff : v));
+}
 
 volatile uint32_t *
 TulipTouch::reg(int block, uint32_t offset)
@@ -309,8 +317,18 @@ TulipTouch::start(IOService *provider)
 		}
 		disp->release();
 	}
-	fOriginX = ((int32_t)fCanvasWidth - (int32_t)fWidth) / 2;
-	fOriginY = ((int32_t)fCanvasHeight - (int32_t)fHeight) / 2;
+	/* AppleCLCD shows the canvas scaled to fit the panel and centered; touches map back through the same fit. */
+	uint64_t scale = ((uint64_t)fWidth << 16) / fCanvasWidth;
+	if (((uint64_t)fHeight << 16) / fCanvasHeight < scale) {
+		scale = ((uint64_t)fHeight << 16) / fCanvasHeight;
+	}
+	if (scale > 1ULL << 16) {
+		scale = 1ULL << 16;
+	}
+	fOutWidth = (int32_t)((fCanvasWidth * scale) >> 16);
+	fOutHeight = (int32_t)((fCanvasHeight * scale) >> 16);
+	fOutX = ((int32_t)fWidth - fOutWidth) / 2;
+	fOutY = ((int32_t)fHeight - fOutHeight) / 2;
 
 	if (!IOHIDEventService::start(provider)) {
 		return false;
@@ -345,11 +363,11 @@ TulipTouch::report(const uint8_t *buf)
 		    (type != NVT_TOUCH_NEW && type != NVT_TOUCH_UPDATE)) {
 			continue;
 		}
-		int32_t px = (int32_t)((uint32_t)t[1] << 4 | t[3] >> 4) + fOriginX;
-		int32_t py = (int32_t)((uint32_t)t[2] << 4 | (t[3] & 0xf)) + fOriginY;
+		int32_t px = (int32_t)((uint32_t)t[1] << 4 | t[3] >> 4) - fOutX;
+		int32_t py = (int32_t)((uint32_t)t[2] << 4 | (t[3] & 0xf)) - fOutY;
 		down[slot] = true;
-		x[slot] = (IOFixed)(((int64_t)px << 16) / (int64_t)fCanvasWidth);
-		y[slot] = (IOFixed)(((int64_t)py << 16) / (int64_t)fCanvasHeight);
+		x[slot] = unitFixed(px, fOutWidth);
+		y[slot] = unitFixed(py, fOutHeight);
 	}
 
 	uint64_t now = mach_absolute_time();

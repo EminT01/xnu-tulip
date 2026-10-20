@@ -62,7 +62,9 @@ class AppleCLCD : public IOMobileFramebuffer
 public:
 	uint32_t fWidth, fHeight;
 	uint32_t fPanelWidth, fPanelHeight, fRowBytes;
-	int32_t fOriginX, fOriginY;
+	/* The canvas, scaled by fScale (16.16), fills fOutWidth x fOutHeight of the panel at fOutX, fOutY. */
+	uint32_t fScale, fOutX, fOutY, fOutWidth, fOutHeight;
+	int32_t *fColumns;
 	TulipSurface *fPanel;
 	IOLock *fLock;
 	OSArray *fClients;
@@ -137,11 +139,18 @@ AppleCLCD::start(IOService *provider)
 		IOLog("TulipFB: no boot framebuffer\n");
 		return false;
 	}
-	/* iOS gets the canvas size from the device tree; the panel shows its center. */
+	/* iOS renders the device tree's canvas; like an iPhone mini's display pipe, we scale it down to fit the panel. */
 	fWidth = canvasSize(provider, "canvas-width", fPanelWidth);
 	fHeight = canvasSize(provider, "canvas-height", fPanelHeight);
-	fOriginX = ((int32_t)fWidth - (int32_t)fPanelWidth) / 2;
-	fOriginY = ((int32_t)fHeight - (int32_t)fPanelHeight) / 2;
+	fScale = (uint32_t)MIN(MIN(((uint64_t)fPanelWidth << 16) / fWidth, ((uint64_t)fPanelHeight << 16) / fHeight), 1ULL << 16);
+	fOutWidth = (uint32_t)(((uint64_t)fWidth * fScale) >> 16);
+	fOutHeight = (uint32_t)(((uint64_t)fHeight * fScale) >> 16);
+	fOutX = (fPanelWidth - fOutWidth) / 2;
+	fOutY = (fPanelHeight - fOutHeight) / 2;
+	fColumns = (int32_t *)IOMallocData(fOutWidth * 2 * sizeof(int32_t));
+	if (!fColumns) {
+		return false;
+	}
 	OSDictionary *match = IOService::nameMatching("IOCoreSurfaceRoot");
 	IOService *surfaces = match ? IOService::waitForMatchingService(match, 10 * NSEC_PER_SEC) : NULL;
 	OSSafeReleaseNULL(match);
@@ -165,8 +174,12 @@ AppleCLCD::start(IOService *provider)
 	setProperty("external", false);
 	setProperty("DisplayPipePlaneBaseAlignment", 64ULL, 32);
 	registerService();
-	IOLog("TulipFB: %ux%u, panel %ux%u at %d,%d, %u bytes per row, panel surface %u\n", fWidth, fHeight,
-	    fPanelWidth, fPanelHeight, fOriginX, fOriginY, fRowBytes, fPanel->id);
+	uint8_t *panel = fPanel->pixels();
+	for (uint32_t y = 0; y < fPanelHeight; y++) {
+		bzero(panel + (uint64_t)y * fRowBytes, (size_t)fPanelWidth * 4);
+	}
+	IOLog("TulipFB: %ux%u shown as %ux%u at %u,%u on the %ux%u panel, panel surface %u\n", fWidth, fHeight,
+	    fOutWidth, fOutHeight, fOutX, fOutY, fPanelWidth, fPanelHeight, fPanel->id);
 	return true;
 }
 
@@ -218,11 +231,28 @@ get32(const uint8_t *p, uint32_t off)
 
 static uint32_t gSwapsLogged;
 
-/* Copy each enabled 32-bit layer into the panel, clipped to the panel's part of the canvas, without scaling. */
+/* Mixes two BGRA pixels, weight w of 256 for b, two channels per multiply. */
+static inline uint32_t
+lerp(uint32_t a, uint32_t b, uint32_t w)
+{
+	uint32_t rb = (((a & 0xff00ff) * (256 - w) + (b & 0xff00ff) * w) >> 8) & 0xff00ff;
+	uint32_t ga = (((a >> 8) & 0xff00ff) * (256 - w) + ((b >> 8) & 0xff00ff) * w) & 0xff00ff00;
+	return rb | ga;
+}
+
+/* Source position for an output pixel along one axis: 16.16 canvas coordinate of its center. */
+static inline int64_t
+sourcePosition(uint32_t out, uint32_t scale)
+{
+	return (((int64_t)out << 16) + 0x8000) * 65536 / scale - 0x8000;
+}
+
+/* Draws each enabled 32-bit layer into the panel, scaled from canvas to panel with bilinear filtering. */
 void
 AppleCLCD::swap(const uint8_t *record)
 {
 	uint32_t mask = (uint32_t)get32(record, SWAP_LAYER_MASK);
+
 	uint8_t *panel = fPanel->pixels();
 
 	for (uint32_t layer = 0; layer < LAYERS; layer++) {
@@ -237,36 +267,52 @@ AppleCLCD::swap(const uint8_t *record)
 			continue;
 		}
 		int32_t sx = MAX(get32(src, 0), 0), sy = MAX(get32(src, 4), 0);
-		int32_t dx = MAX(get32(dst, 0), 0) - fOriginX, dy = MAX(get32(dst, 4), 0) - fOriginY;
+		int32_t dx = MAX(get32(dst, 0), 0), dy = MAX(get32(dst, 4), 0);
 		int32_t w = get32(dst, 8), h = get32(dst, 12);
 		if (w <= 0 || h <= 0) {
 			w = (int32_t)s->width;
 			h = (int32_t)s->height;
 		}
-		if (dx < 0) {
-			sx -= dx;
-			w += dx;
-			dx = 0;
-		}
-		if (dy < 0) {
-			sy -= dy;
-			h += dy;
-			dy = 0;
-		}
-		w = MIN(w, MIN((int32_t)s->width - sx, (int32_t)fPanelWidth - dx));
-		h = MIN(h, MIN((int32_t)s->height - sy, (int32_t)fPanelHeight - dy));
+		w = MIN(w, MIN((int32_t)s->width - sx, (int32_t)fWidth - dx));
+		h = MIN(h, MIN((int32_t)s->height - sy, (int32_t)fHeight - dy));
 		if (gSwapsLogged < 8) {
 			gSwapsLogged++;
 			kprintf("TulipFB: swap %d layer %u surface %u %ux%u format 0x%x -> %d,%d %dx%d\n",
 			    get32(record, 0x50), layer, id, s->width, s->height, s->pixelFormat, dx, dy, w, h);
 		}
 		uint64_t last = (uint64_t)s->offset + (uint64_t)(sy + h - 1) * s->bytesPerRow + (uint64_t)(sx + w) * 4;
-		uint8_t *pixels = s->pixels();
-		if (w > 0 && h > 0 && s->bytesPerElement == 4 && s->elementWidth == 1 && s->elementHeight == 1 &&
-		    pixels && last <= s->data->getLength()) {
-			for (int32_t y = 0; y < h; y++) {
-				memcpy(panel + (uint64_t)(dy + y) * fRowBytes + (uint64_t)dx * 4,
-				    pixels + s->offset + (uint64_t)(sy + y) * s->bytesPerRow + (uint64_t)sx * 4, (size_t)w * 4);
+		const uint8_t *pixels = s->pixels();
+		if (w <= 0 || h <= 0 || s->bytesPerElement != 4 || s->elementWidth != 1 || s->elementHeight != 1 ||
+		    !pixels || last > s->data->getLength()) {
+			s->release();
+			continue;
+		}
+		pixels += s->offset;
+
+		/* Output rectangle of this layer, in panel pixels relative to the scaled canvas. */
+		uint32_t ox0 = (uint32_t)(((uint64_t)dx * fScale + 0xffff) >> 16);
+		uint32_t oy0 = (uint32_t)(((uint64_t)dy * fScale + 0xffff) >> 16);
+		uint32_t ox1 = MIN((uint32_t)(((uint64_t)(dx + w) * fScale) >> 16), fOutWidth);
+		uint32_t oy1 = MIN((uint32_t)(((uint64_t)(dy + h) * fScale) >> 16), fOutHeight);
+		for (uint32_t ox = ox0; ox < ox1; ox++) {
+			int64_t cx = MIN(MAX(sourcePosition(ox, fScale) - ((int64_t)dx << 16), 0), (int64_t)(w - 1) << 16);
+			int32_t x = (int32_t)(cx >> 16);
+			fColumns[2 * ox] = sx + x;
+			fColumns[2 * ox + 1] = x + 1 < w ? (int32_t)((cx & 0xffff) >> 8) : 0;
+		}
+		for (uint32_t oy = oy0; oy < oy1; oy++) {
+			int64_t cy = MIN(MAX(sourcePosition(oy, fScale) - ((int64_t)dy << 16), 0), (int64_t)(h - 1) << 16);
+			int32_t y = (int32_t)(cy >> 16);
+			uint32_t wy = y + 1 < h ? (uint32_t)((cy & 0xffff) >> 8) : 0;
+			const uint32_t *row0 = (const uint32_t *)(pixels + (uint64_t)(sy + y) * s->bytesPerRow);
+			const uint32_t *row1 = wy ? (const uint32_t *)((const uint8_t *)row0 + s->bytesPerRow) : row0;
+			uint32_t *out = (uint32_t *)(panel + (uint64_t)(fOutY + oy) * fRowBytes) + fOutX;
+			for (uint32_t ox = ox0; ox < ox1; ox++) {
+				int32_t x = fColumns[2 * ox];
+				uint32_t wx = (uint32_t)fColumns[2 * ox + 1];
+				uint32_t top = lerp(row0[x], row0[x + (wx != 0)], wx);
+				uint32_t bottom = lerp(row1[x], row1[x + (wx != 0)], wx);
+				out[ox] = lerp(top, bottom, wy);
 			}
 		}
 		s->release();
