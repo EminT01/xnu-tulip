@@ -74,6 +74,11 @@ const char * gIOKernelConfigTables =
     "     'IOProviderClass' = IOPlatformDevice;"
     "     'IONameMatch'     = 'qcom,spmi-pmic-arb';"
     "   },"
+    "   {"
+    "     'IOClass'         = TulipTouch;"
+    "     'IOProviderClass' = IOPlatformDevice;"
+    "     'IONameMatch'     = 'novatek,nt36672a';"
+    "   },"
 #endif
     "   {"
     "     'IOClass'         = IOPanicPlatform;"
