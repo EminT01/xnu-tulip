@@ -33,10 +33,10 @@ env:
   KERNEL_CONFIG: ${{ inputs.kernel_config || 'DEVELOPMENT' }}
   MACHINE_CONFIG: TULIP
   ARCH_CONFIG: ARM64
-
+  
 jobs:
   build:
-        runs-on: macos-15-intel
+    runs-on: macos-15-intel
     timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
