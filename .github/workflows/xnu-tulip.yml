@@ -1,4 +1,4 @@
-name: xnu-tulip 
+name: xnu-tulip
 
 # Builds this fork with blacktop/darwin-xnu-build (dxb). The tree itself is already
 # patched (TULIP machine config), so no patch stack is applied; dxb only supplies the
@@ -20,6 +20,7 @@ on:
     branches: [tulip]
     paths:
       - "pexpert/pexpert/arm64/TULIP.h"
+      - ".github/tulip-4k.py"
       - ".github/workflows/xnu-tulip.yml"
 
 concurrency:
@@ -33,9 +34,11 @@ env:
   KERNEL_CONFIG: ${{ inputs.kernel_config || 'DEVELOPMENT' }}
   MACHINE_CONFIG: TULIP
   ARCH_CONFIG: ARM64
-  
+
 jobs:
   build:
+    # macos-14 was retired in 2026. macos-15-intel is used on purpose: dxb (and the
+    # libfirehose_kernel xcconfig) assume an Intel host with Homebrew in /usr/local.
     runs-on: macos-15-intel
     timeout-minutes: 180
     steps:
@@ -75,6 +78,17 @@ jobs:
           else:
               print('[ok] TULIP.h already 4K')
           PY
+
+      - name: TULIP 4K/iOS layout fixes
+        run: |
+          # Exact, verified, idempotent edits: iOS kernel VA layout instead of the
+          # macOS one, 4 KB user/granule geometry instead of 16 KB, iOS zone map
+          # and compressor sizes. Fails loudly if an anchor drifted.
+          # (checkout used path: xnu-src, so the repo -- and this script -- now
+          # lives in dxb/xnu.)
+          python3 dxb/xnu/.github/tulip-4k.py dxb/xnu
+          grep -n -A4 'TULIP' dxb/xnu/makedefs/MakeInc.def | head -20
+          grep -n 'MACH_VM_MAX_ADDRESS_RAW' dxb/xnu/osfmk/mach/arm/vm_param.h
 
       - name: libfirehose_kernel for arm64
         run: |
