@@ -900,6 +900,145 @@ edit(
 )
 
 
+# --------------------------------------------------------------------------
+# 11. Post-MMU stage probes (start.s).
+#     The screen already proves that start_first_cpu runs and that execution
+#     reaches the instruction just before SCTLR_EL1.M is set.  These probes
+#     bisect everything after that: instruction fetch with the MMU on, the
+#     branch into the linked (KVA) address space, and any exception taken
+#     while the early `b .` vectors are still installed.
+# --------------------------------------------------------------------------
+edit(
+    "osfmk/arm64/start.s",
+    "\t// Enable caches, MMU, ROP and JOP\n"
+    "\tMOV64   x0, SCTLR_EL1_DEFAULT\n"
+    "\tMSR_SCTLR_EL1_X0\n"
+    "\tisb\t\tsy\n",
+    "\t// Enable caches, MMU, ROP and JOP\n"
+    "\tMOV64   x0, SCTLR_EL1_DEFAULT\n"
+    "\tMSR_SCTLR_EL1_X0\n"
+    "\tisb\t\tsy\n"
+    "#if defined(TULIP)\n"
+    "\t/* Probe: MMU is on, still executing out of the V=P mapping. */\n"
+    "\tTULIP_EARLY_MARK 220, 0x00ff00\n"
+    "#endif\n",
+    "probe 220: MMU enabled",
+)
+
+edit(
+    "osfmk/arm64/start.s",
+    "\t// Return to arm_init()\n"
+    "\tret\n"
+    "\n"
+    "Ltrampoline:\n",
+    "#if defined(TULIP)\n"
+    "\t/*\n"
+    "\t * Probe: about to fetch instructions from the linked (KVA) address\n"
+    "\t * space.  Paint here, then resume at arm_init through a branch rather\n"
+    "\t * than the return, so a fault on the KVA fetch is distinguishable.\n"
+    "\t */\n"
+    "\tTULIP_EARLY_MARK 280, 0x00ffff\n"
+    "\tadrp\tx9, Ltulip_kva_entry@page\n"
+    "\tadd\t\tx9, x9, Ltulip_kva_entry@pageoff\n"
+    "\tadd\t\tx9, x9, x22\n"
+    "\tsub\t\tx9, x9, x23\n"
+    "\tbr\t\tx9\n"
+    "#else\n"
+    "\t// Return to arm_init()\n"
+    "\tret\n"
+    "#endif\n"
+    "\n"
+    "Ltrampoline:\n",
+    "probe 280: switching to KVA",
+)
+
+edit(
+    "osfmk/arm64/start.s",
+    "\t.text\n"
+    "\t.align 2\n"
+    "arm_init_tramp:\n",
+    "\t.text\n"
+    "\t.align 2\n"
+    "#if defined(TULIP)\n"
+    "Ltulip_kva_entry:\n"
+    "\t/* Probe: reached by branching to a linked KVA address. */\n"
+    "\tTULIP_EARLY_MARK 340, 0xff00ff\n"
+    "\tb\t\tEXT(arm_init)\n"
+    "#endif\n"
+    "arm_init_tramp:\n",
+    "probe 340: executing at KVA",
+)
+
+edit(
+    "osfmk/arm64/start.s",
+    "\t/* EL1 SP1: These vectors trap errors during early startup on non-boot CPUs. */\n"
+    "\t.align\t9\n"
+    "\tb\t\t.\n"
+    "\t.align\t7\n"
+    "\tb\t\t.\n"
+    "\t.align\t7\n"
+    "\tb\t\t.\n"
+    "\t.align\t7\n"
+    "\tb\t\t.\n",
+    "\t/* EL1 SP1: These vectors trap errors during early startup on non-boot CPUs. */\n"
+    "#if defined(TULIP)\n"
+    "\t.align\t9\n"
+    "\tb\t\tLtulip_exc_trap\n"
+    "\t.align\t7\n"
+    "\tb\t\tLtulip_exc_trap\n"
+    "\t.align\t7\n"
+    "\tb\t\tLtulip_exc_trap\n"
+    "\t.align\t7\n"
+    "\tb\t\tLtulip_exc_trap\n"
+    "#else\n"
+    "\t.align\t9\n"
+    "\tb\t\t.\n"
+    "\t.align\t7\n"
+    "\tb\t\t.\n"
+    "\t.align\t7\n"
+    "\tb\t\t.\n"
+    "\t.align\t7\n"
+    "\tb\t\t.\n"
+    "#endif\n",
+    "tulip: report early exceptions instead of spinning",
+)
+
+edit(
+    "osfmk/arm64/start.s",
+    "\t.align\t7\n"
+    "\t.globl EXT(reset_vector)\n"
+    "LEXT(reset_vector)\n"
+    "\t// Preserve x0 for start_first_cpu, if called\n",
+    "\t.align\t7\n"
+    "\t.globl EXT(reset_vector)\n"
+    "LEXT(reset_vector)\n"
+    "#if defined(TULIP)\n"
+    "\t/* Probe: the reset vector was re-entered (e.g. exception with SPSel=0). */\n"
+    "\tTULIP_EARLY_MARK 440, 0xff8000\n"
+    "#endif\n"
+    "\t// Preserve x0 for start_first_cpu, if called\n",
+    "probe 440: reset vector re-entered",
+)
+
+edit(
+    "osfmk/arm64/start.s",
+    "/* vim: set ts=4: */\n",
+    "#if defined(TULIP)\n"
+    "/*\n"
+    " * Any exception taken while the early vectors are installed lands here.\n"
+    " * Paint a blue square so the failure is visible, then park the CPU.\n"
+    " */\n"
+    "\t.align 7\n"
+    "Ltulip_exc_trap:\n"
+    "\tTULIP_EARLY_MARK 400, 0x0000ff\n"
+    "\tb\t\t.\n"
+    "#endif\n"
+    "\n"
+    "/* vim: set ts=4: */\n",
+    "tulip: exception trap mark",
+)
+
+
 def main() -> int:
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     check = "--check" in sys.argv[1:]
