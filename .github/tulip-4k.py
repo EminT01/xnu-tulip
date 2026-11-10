@@ -22,6 +22,388 @@ EDITS = []
 def edit(relpath, old, new, why):
     EDITS.append((relpath, old, new, why))
 
+FILES = {}
+
+
+def newfile(relpath, content, why):
+    FILES[relpath] = (content, why)
+
+
+FONT_HEX = (
+    "00000000000000000000000000000000",
+    "0000183c3c3c18181800181800000000",
+    "00666666240000000000000000000000",
+    "0000006c6cfe6c6c6cfe6c6c00000000",
+    "18187cc6c2c07c060686c67c18180000",
+    "00000000c2c60c183060c68600000000",
+    "0000386c6c3876dccccccc7600000000",
+    "00303030600000000000000000000000",
+    "00000c18303030303030180c00000000",
+    "000030180c0c0c0c0c0c183000000000",
+    "0000000000663cff3c66000000000000",
+    "000000000018187e1818000000000000",
+    "00000000000000000018181830000000",
+    "00000000000000fe0000000000000000",
+    "00000000000000000000181800000000",
+    "0000000002060c183060c08000000000",
+    "0000386cc6c6d6d6c6c66c3800000000",
+    "00001838781818181818187e00000000",
+    "00007cc6060c183060c0c6fe00000000",
+    "00007cc606063c060606c67c00000000",
+    "00000c1c3c6cccfe0c0c0c1e00000000",
+    "0000fec0c0c0fc060606c67c00000000",
+    "00003860c0c0fcc6c6c6c67c00000000",
+    "0000fec606060c183030303000000000",
+    "00007cc6c6c67cc6c6c6c67c00000000",
+    "00007cc6c6c67e0606060c7800000000",
+    "00000000181800000018180000000000",
+    "00000000181800000018183000000000",
+    "000000060c18306030180c0600000000",
+    "00000000007e00007e00000000000000",
+    "0000006030180c060c18306000000000",
+    "00007cc6c60c18181800181800000000",
+    "0000007cc6c6dedededcc07c00000000",
+    "000010386cc6c6fec6c6c6c600000000",
+    "0000fc6666667c66666666fc00000000",
+    "00003c66c2c0c0c0c0c2663c00000000",
+    "0000f86c6666666666666cf800000000",
+    "0000fe6662687868606266fe00000000",
+    "0000fe6662687868606060f000000000",
+    "00003c66c2c0c0dec6c6663a00000000",
+    "0000c6c6c6c6fec6c6c6c6c600000000",
+    "00003c18181818181818183c00000000",
+    "00001e0c0c0c0c0ccccccc7800000000",
+    "0000e666666c78786c6666e600000000",
+    "0000f06060606060606266fe00000000",
+    "0000c6eefefed6c6c6c6c6c600000000",
+    "0000c6e6f6fedecec6c6c6c600000000",
+    "00007cc6c6c6c6c6c6c6c67c00000000",
+    "0000fc6666667c60606060f000000000",
+    "00007cc6c6c6c6c6c6d6de7c0c0e0000",
+    "0000fc6666667c6c666666e600000000",
+    "00007cc6c660380c06c6c67c00000000",
+    "00007e7e5a1818181818183c00000000",
+    "0000c6c6c6c6c6c6c6c6c67c00000000",
+    "0000c6c6c6c6c6c6c66c381000000000",
+    "0000c6c6c6c6d6d6d6feee6c00000000",
+    "0000c6c66c7c38387c6cc6c600000000",
+    "0000666666663c181818183c00000000",
+    "0000fec6860c183060c2c6fe00000000",
+    "00003c30303030303030303c00000000",
+    "00000080c0e070381c0e060200000000",
+    "00003c0c0c0c0c0c0c0c0c3c00000000",
+    "10386cc6000000000000000000000000",
+    "00000000000000000000000000ff0000",
+    "0030180c000000000000000000000000",
+    "0000000000780c7ccccccc7600000000",
+    "0000e06060786c666666667c00000000",
+    "00000000007cc6c0c0c0c67c00000000",
+    "00001c0c0c3c6ccccccccc7600000000",
+    "00000000007cc6fec0c0c67c00000000",
+    "00001c36323078303030307800000000",
+    "000000000076cccccccccc7c0ccc7800",
+    "0000e060606c7666666666e600000000",
+    "00001818003818181818183c00000000",
+    "00000606000e06060606060666663c00",
+    "0000e06060666c78786c66e600000000",
+    "00003818181818181818183c00000000",
+    "0000000000ecfed6d6d6d6c600000000",
+    "0000000000dc66666666666600000000",
+    "00000000007cc6c6c6c6c67c00000000",
+    "0000000000dc66666666667c6060f000",
+    "000000000076cccccccccc7c0c0c1e00",
+    "0000000000dc7666606060f000000000",
+    "00000000007cc660380cc67c00000000",
+    "0000103030fc30303030361c00000000",
+    "0000000000cccccccccccc7600000000",
+    "0000000000c6c6c6c6c66c3800000000",
+    "0000000000c6c6d6d6d6fe6c00000000",
+    "0000000000c66c3838386cc600000000",
+    "0000000000c6c6c6c6c6c67e060cf800",
+    "0000000000fecc183060c6fe00000000",
+    "00000e18181870181818180e00000000",
+    "00001818181818181818181800000000",
+    "0000701818180e181818187000000000",
+    "0076dc00000000000000000000000000",
+)
+
+# cp850 8x16, MSB = leftmost pixel (extracted from the shim's font.h).
+_FONT_ENTRIES = "".join(
+    "\t{" + ",".join("0x" + FONT_HEX[i][j:j + 2] for j in range(0, 32, 2)) + "},\n"
+    for i in range(95))
+
+TULIP_EARLY_H = r"""/*
+ * Early boot diagnostics for tulip (Redmi Note 6 Pro, SDM636).
+ * Active only while a mapping for the splash framebuffer exists; see
+ * tulip_early.c.  The no-op stubs keep every other board build untouched.
+ */
+#ifndef _ARM64_TULIP_EARLY_H_
+#define _ARM64_TULIP_EARLY_H_
+
+#include <stdarg.h>
+#include <stdint.h>
+#include <pexpert/arm64/board_config.h>
+
+#if CONFIG_TULIP
+void tulip_early_mark(unsigned int stage, const char *label);
+void tulip_early_putc(char c);
+void tulip_early_panic(const char *fmt, va_list *args);
+void tulip_early_relocate(void);
+void tulip_early_map_final(void);
+void tulip_early_disable(void);
+#else
+static inline void tulip_early_mark(unsigned int stage, const char *label)
+{
+	(void)stage;
+	(void)label;
+}
+static inline void tulip_early_putc(char c)
+{
+	(void)c;
+}
+static inline void tulip_early_panic(const char *fmt, va_list *args)
+{
+	(void)fmt;
+	(void)args;
+}
+static inline void tulip_early_relocate(void) {}
+static inline void tulip_early_map_final(void) {}
+static inline void tulip_early_disable(void) {}
+#endif /* CONFIG_TULIP */
+
+#endif /* _ARM64_TULIP_EARLY_H_ */
+"""
+
+_TULIP_EARLY_C_TEMPLATE = r"""/*
+ * Early boot screen for tulip: text straight to the ABL splash framebuffer.
+ *
+ * XNU's own framebuffer console only exists after arm_vm_init() returns, so a
+ * hang or a fault before that point is invisible: the shim's blue screen just
+ * stays there.  start.s maps the splash framebuffer into the bootstrap V=P
+ * tables, and this file writes stage marks and panic text through it.
+ * arm_vm_init() republishes the same physical block at a kernel VA that
+ * survives the switch to the real TTBR1 and calls tulip_early_relocate().
+ */
+#include <arm64/tulip_early.h>
+
+#if CONFIG_TULIP
+
+#include <stdint.h>
+#include <kern/misc_protos.h>
+#include <arm64/proc_reg.h>
+#include <arm/pmap.h>
+
+/* ABL splash buffer, as handed to us in boot_args.Video. */
+#define EFB_PHYS      0x9d400000ULL
+#define EFB_WIDTH     1080u
+#define EFB_HEIGHT    2280u
+#define EFB_STRIDE    (4320u / 4u)      /* pixels per line */
+
+/*
+ * The shim prints its loader dump as 48 px rows from y=144 down to y=720;
+ * start below it so that dump stays readable next to the kernel's marks.
+ */
+#define EFB_TOP       800u
+
+/*
+ * A kernel VA that survives bootstrap table teardown: the reserved
+ * low-globals block is mapped by the final TTBR1, and the 2 MB slot right
+ * after LOW_GLOBAL_BASE_ADDRESS is empty (low_global_vr_size is 32 MB).
+ */
+#define EFB_VA        (LOW_GLOBAL_BASE_ADDRESS + ARM_TT_L2_SIZE)
+
+#define EFB_SCALE     2u
+#define EFB_CELL_W    (8u * EFB_SCALE)
+#define EFB_CELL_H    (16u * EFB_SCALE)
+#define EFB_COLS      (EFB_WIDTH / EFB_CELL_W)
+#define EFB_ROWS      ((EFB_HEIGHT - EFB_TOP) / EFB_CELL_H)
+
+/*
+ * cp850 8x16, bit 7 is the leftmost pixel.  Same table the shim draws with;
+ * iso_font is only linked when the optional video console is built in.
+ */
+static const unsigned char tulip_font[95][16] = {
+/*@FONT@*/};
+
+static volatile uint32_t *early_fb = (volatile uint32_t *)(uintptr_t)EFB_PHYS;
+static unsigned int early_row, early_col;
+static unsigned int early_started, early_disabled, early_panicking;
+static unsigned int early_final_ok;
+
+static void
+early_clear_row(void)
+{
+	for (unsigned int y = 0; y < EFB_CELL_H; y++) {
+		volatile uint32_t *line = early_fb +
+		    (EFB_TOP + early_row * EFB_CELL_H + y) * EFB_STRIDE;
+		for (unsigned int x = 0; x < EFB_WIDTH; x++) {
+			line[x] = 0x00000000u;
+		}
+	}
+}
+
+void
+tulip_early_putc(char c)
+{
+	if (early_disabled) {
+		return;
+	}
+	if (!early_started) {
+		early_started = 1;
+		early_clear_row();
+	}
+	if (c == '\r') {
+		early_col = 0;
+		return;
+	}
+	if (c == '\n' || early_col >= EFB_COLS) {
+		early_col = 0;
+		early_row = (early_row + 1u) % EFB_ROWS;
+		early_clear_row();
+		if (c == '\n') {
+			return;
+		}
+	}
+	unsigned char ch = (unsigned char)c;
+	if (ch < 0x20 || ch > 0x7e) {
+		ch = '?';
+	}
+	const unsigned char *glyph = tulip_font[ch - 0x20];
+	for (unsigned int gy = 0; gy < 16; gy++) {
+		for (unsigned int sy = 0; sy < EFB_SCALE; sy++) {
+			volatile uint32_t *line = early_fb +
+			    (EFB_TOP + early_row * EFB_CELL_H + gy * EFB_SCALE + sy) * EFB_STRIDE +
+			    early_col * EFB_CELL_W;
+			for (unsigned int gx = 0; gx < 8; gx++) {
+				uint32_t pixel = (glyph[gy] & (0x80u >> gx)) ?
+				    0x00ffffffu : 0x00000000u;
+				for (unsigned int sx = 0; sx < EFB_SCALE; sx++) {
+					line[gx * EFB_SCALE + sx] = pixel;
+				}
+			}
+		}
+	}
+	early_col++;
+}
+
+static void
+early_string(const char *s)
+{
+	while (*s) {
+		tulip_early_putc(*s++);
+	}
+}
+
+void
+tulip_early_mark(unsigned int stage, const char *label)
+{
+	if (early_disabled || stage > 20) {
+		return;
+	}
+	uint32_t color = 0xff00ff00u | ((stage * 28u) << 16);
+	for (unsigned int y = EFB_HEIGHT - 32u; y < EFB_HEIGHT; y++) {
+		for (unsigned int x = stage * 64u;
+		    x < (stage + 1u) * 64u && x < EFB_WIDTH; x++) {
+			early_fb[y * EFB_STRIDE + x] = color;
+		}
+	}
+	__asm__ volatile("dsb sy" ::: "memory");
+	early_string("TULIP EARLY ");
+	if (stage >= 10) {
+		tulip_early_putc((char)('0' + stage / 10));
+	}
+	tulip_early_putc((char)('0' + stage % 10));
+	early_string(": ");
+	early_string(label);
+	tulip_early_putc('\n');
+}
+
+void
+tulip_early_panic(const char *fmt, va_list *args)
+{
+	if (early_disabled || early_panicking) {
+		return;
+	}
+	early_panicking = 1;
+	early_string("\nEARLY PANIC: ");
+	va_list copy;
+	va_copy(copy, *args);
+	_doprnt(fmt, &copy, tulip_early_putc, 16);
+	va_end(copy);
+	tulip_early_putc('\n');
+	__asm__ volatile("dsb sy" ::: "memory");
+}
+
+void
+tulip_early_relocate(void)
+{
+	if (early_disabled) {
+		return;
+	}
+	early_string("\nTULIP EARLY: leaving bootstrap TTBR0\n");
+	if (!early_final_ok) {
+		early_string("TULIP EARLY: no final FB alias, console off\n");
+		early_disabled = 1;
+		return;
+	}
+	early_fb = (volatile uint32_t *)(uintptr_t)EFB_VA;
+	__asm__ volatile("dsb sy" ::: "memory");
+	early_string("TULIP EARLY: framebuffer kernel VA live\n");
+}
+
+/*
+ * Called from arm_vm_init() while phystokv() still refers to the bootstrap
+ * aperture: install the framebuffer block into the final kernel L2 table.
+ */
+void
+tulip_early_map_final(void)
+{
+	const uint64_t va = EFB_VA;
+	tt_entry_t l1 = cpu_tte[(va & ARM_TT_L1_INDEX_MASK) >> ARM_TT_L1_SHIFT];
+
+	if ((l1 & (ARM_TTE_VALID | ARM_TTE_TYPE_MASK)) !=
+	    (ARM_TTE_VALID | ARM_TTE_TYPE_TABLE)) {
+		return;
+	}
+	tt_entry_t *l2 = (tt_entry_t *)phystokv(l1 & ARM_TTE_TABLE_MASK);
+	tt_entry_t *slot = &l2[(va & ARM_TT_L2_INDEX_MASK) >> ARM_TT_L2_SHIFT];
+
+	if (*slot != ARM_TTE_EMPTY) {
+		return;
+	}
+	*slot = (tt_entry_t)(EFB_PHYS | ARM_TTE_VALID | ARM_TTE_TYPE_BLOCK |
+	    ARM_TTE_BLOCK_SH(SH_OUTER_MEMORY) |
+	    ARM_TTE_BLOCK_ATTRINDX(CACHE_ATTRINDX_WRITECOMB) |
+	    ARM_TTE_BLOCK_AF | ARM_TTE_BLOCK_PNX | ARM_TTE_BLOCK_NX);
+	__asm__ volatile("dsb ishst" ::: "memory");
+	early_final_ok = 1;
+}
+
+void
+tulip_early_disable(void)
+{
+	tulip_early_mark(15, "early console disabled");
+	early_disabled = 1;
+	__asm__ volatile("dsb sy" ::: "memory");
+}
+#endif /* CONFIG_TULIP */
+"""
+
+TULIP_EARLY_C = _TULIP_EARLY_C_TEMPLATE.replace(
+    "/*@FONT@*/", "\n" + _FONT_ENTRIES)
+
+newfile(
+    "osfmk/arm64/tulip_early.h",
+    TULIP_EARLY_H,
+    "early screen diagnostics API",
+)
+
+newfile(
+    "osfmk/arm64/tulip_early.c",
+    TULIP_EARLY_C,
+    "splash-framebuffer stage marks and panic text",
+)
+
 
 # --------------------------------------------------------------------------
 # 1. makedefs/MakeInc.def: embedded memory layout instead of the macOS one.
@@ -263,6 +645,261 @@ edit(
 )
 
 
+# --------------------------------------------------------------------------
+# 9. Early framebuffer diagnostics (see osfmk/arm64/tulip_early.c).
+#    start.s maps the ABL splash buffer into the bootstrap V=P tables; the C
+#    side prints a numbered line per boot stage and mirrors panics, because
+#    XNU has no console at all until arm_vm_init() finishes.
+# --------------------------------------------------------------------------
+edit(
+    "osfmk/arm64/start.s",
+    """	/* Setup the KVA bootstrap mapping */
+	lsr		x5,  x24, #(ARM_TT_L2_SHIFT)
+	create_bootstrap_mapping x14, x15, x5, x3, x2, x9, x10, x11, x12, x13
+
+	/* Ensure TTEs are visible */
+""",
+    """	/* Setup the KVA bootstrap mapping */
+	lsr		x5,  x24, #(ARM_TT_L2_SHIFT)
+	create_bootstrap_mapping x14, x15, x5, x3, x2, x9, x10, x11, x12, x13
+
+#if CONFIG_TULIP
+	/*
+	 * Splash framebuffer (0x9d400000, 1080x2280, 32bpp): one 2 MB
+	 * Normal-NC block into the V=P L2 table that was just allocated at
+	 * x25 + 2*PGBYTES, so tulip_early.c can draw as soon as the MMU is on.
+	 */
+	MOV64	x10, 0x9d400000
+	MOV64	x11, (ARM_TTE_TYPE_BLOCK | ARM_TTE_VALID | ARM_TTE_BLOCK_SH(SH_OUTER_MEMORY) | ARM_TTE_BLOCK_ATTRINDX(CACHE_ATTRINDX_WRITECOMB) | ARM_TTE_BLOCK_AF | ARM_TTE_BLOCK_PNX | ARM_TTE_BLOCK_NX)
+	orr		x11, x11, x10
+	and		x12, x10, #(ARM_TT_L2_INDEX_MASK)
+	lsr		x12, x12, #(ARM_TT_L2_SHIFT)
+	add		x13, x25, #(2 * PGBYTES)
+	str		x11, [x13, x12, lsl #TTE_SHIFT]
+#endif /* CONFIG_TULIP */
+
+	/* Ensure TTEs are visible */
+""",
+    "map the splash framebuffer into the bootstrap V=P tables",
+)
+
+edit(
+    "osfmk/arm/arm_init.c",
+    """#include <arm64/proc_reg.h>
+#include <arm/pmap.h>
+""",
+    """#include <arm64/proc_reg.h>
+#include <arm64/tulip_early.h>
+#include <arm/pmap.h>
+""",
+    "include the early console",
+)
+
+edit(
+    "osfmk/arm/arm_init.c",
+    """	unsigned int dt_entry_size = 0;
+
+#if CONFIG_TULIP
+""",
+    """	unsigned int dt_entry_size = 0;
+
+	tulip_early_mark(1, "arm_init entered (MMU on)");
+
+#if CONFIG_TULIP
+""",
+    "stage 1 mark",
+)
+
+edit(
+    "osfmk/arm/arm_init.c",
+    """	PE_init_platform(FALSE, args); /* Get platform expert set up */
+""",
+    """	PE_init_platform(FALSE, args); /* Get platform expert set up */
+	tulip_early_mark(2, "PE_init_platform done");
+""",
+    "stage 2 mark",
+)
+
+edit(
+    "osfmk/arm/arm_init.c",
+    """	ml_parse_cpu_topology();
+""",
+    """	ml_parse_cpu_topology();
+	tulip_early_mark(3, "ml_parse_cpu_topology done");
+""",
+    "stage 3 mark",
+)
+
+edit(
+    "osfmk/arm/arm_init.c",
+    """	cpu_bootstrap();
+
+	rtclock_early_init();
+""",
+    """	cpu_bootstrap();
+	tulip_early_mark(4, "cpu_bootstrap done");
+
+	rtclock_early_init();
+""",
+    "stage 4 mark",
+)
+
+edit(
+    "osfmk/arm/arm_init.c",
+    """	kernel_debug_string_early("kernel_startup_bootstrap");
+	kernel_startup_bootstrap();
+""",
+    """	kernel_debug_string_early("kernel_startup_bootstrap");
+	kernel_startup_bootstrap();
+	tulip_early_mark(5, "kernel_startup_bootstrap done");
+""",
+    "stage 5 mark",
+)
+
+edit(
+    "osfmk/arm/arm_init.c",
+    """	cpu_init();
+
+	processor_bootstrap();
+""",
+    """	cpu_init();
+	tulip_early_mark(6, "cpu_init done");
+
+	processor_bootstrap();
+""",
+    "stage 6 mark",
+)
+
+edit(
+    "osfmk/arm/arm_init.c",
+    """	arm_vm_init(xmaxmem, args);
+""",
+    """	tulip_early_mark(7, "entering arm_vm_init");
+	arm_vm_init(xmaxmem, args);
+""",
+    "stage 7 mark",
+)
+
+edit(
+    "osfmk/arm64/arm_vm_init.c",
+    """#include <arm64/lowglobals.h>
+""",
+    """#include <arm64/lowglobals.h>
+#include <arm64/tulip_early.h>
+""",
+    "include the early console",
+)
+
+edit(
+    "osfmk/arm64/arm_vm_init.c",
+    """	arm_set_user_tbi();
+
+	arm_vm_physmap_init(args);
+""",
+    """	tulip_early_mark(8, "arm_vm_init reached the MMU switch");
+	arm_set_user_tbi();
+
+	/* phystokv() must still refer to the bootstrap aperture here. */
+	tulip_early_map_final();
+
+	arm_vm_physmap_init(args);
+""",
+    "map the surviving framebuffer alias, stage 8 mark",
+)
+
+edit(
+    "osfmk/arm64/arm_vm_init.c",
+    """	ml_enable_monitor();
+
+	set_mmu_ttb(invalid_ttep & TTBR_BADDR_MASK);
+
+	flush_mmu_tlb();
+	kva_active = TRUE;
+""",
+    """	ml_enable_monitor();
+
+	/* The final TTBR1 is live: move the console off the V=P mapping. */
+	tulip_early_relocate();
+
+	set_mmu_ttb(invalid_ttep & TTBR_BADDR_MASK);
+
+	flush_mmu_tlb();
+	tulip_early_mark(10, "TTBR0 off, TLB flushed");
+	kva_active = TRUE;
+""",
+    "relocate the console, stage 10 mark",
+)
+
+edit(
+    "osfmk/arm64/arm_vm_init.c",
+    """	invalid_tte = (tt_entry_t*)(phystokv(invalid_ttep));
+
+	// From here on out, we're off the bootstrap translation tables.
+""",
+    """	invalid_tte = (tt_entry_t*)(phystokv(invalid_ttep));
+	tulip_early_mark(11, "physmap table pointers rebound");
+
+	// From here on out, we're off the bootstrap translation tables.
+""",
+    "stage 11 mark",
+)
+
+edit(
+    "osfmk/arm64/arm_vm_init.c",
+    """	pmap_bootstrap(dynamic_memory_begin);
+""",
+    """	tulip_early_mark(12, "calling pmap_bootstrap");
+	pmap_bootstrap(dynamic_memory_begin);
+	tulip_early_mark(13, "pmap_bootstrap done");
+""",
+    "stages 12-13 marks",
+)
+
+edit(
+    "osfmk/conf/files.arm64",
+    """osfmk/arm64/arm_vm_init.c	optional config_pmap_ppl
+""",
+    """osfmk/arm64/arm_vm_init.c	optional config_pmap_ppl
+osfmk/arm64/tulip_early.c	optional config_tulip
+""",
+    "build the early console on tulip",
+)
+
+edit(
+    "osfmk/kern/debug.c",
+    """#include <console/serial_protos.h>
+#include <IOKit/IOBSD.h>
+""",
+    """#include <console/serial_protos.h>
+#if defined(__arm64__)
+#include <arm64/tulip_early.h>
+#endif
+#include <IOKit/IOBSD.h>
+""",
+    "include the early console",
+)
+
+edit(
+    "osfmk/kern/debug.c",
+    """#pragma clang diagnostic pop
+
+#if defined(__x86_64__) && (DEVELOPMENT || DEBUG)
+	read_lbr();
+#endif
+""",
+    """#pragma clang diagnostic pop
+
+	/* No CPU/thread/debugger state is needed for this first panic copy. */
+	tulip_early_panic(panic_format_str, panic_args);
+
+#if defined(__x86_64__) && (DEVELOPMENT || DEBUG)
+	read_lbr();
+#endif
+""",
+    "mirror panics to the early screen",
+)
+
+
 def main() -> int:
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     check = "--check" in sys.argv[1:]
@@ -275,6 +912,24 @@ def main() -> int:
         return 2
 
     failed = 0
+    for relpath, (content, why) in FILES.items():
+        path = root / relpath
+        if path.is_file():
+            if path.read_text() == content:
+                print(f"[skip] {relpath}: already present ({why})")
+                continue
+            print(f"[FAIL] {relpath}: exists with different content ({why})")
+            failed += 1
+            continue
+        if not check:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content)
+        print(f"[{'ok' if not check else 'would'}] {relpath}: create ({why})")
+
+    if failed:
+        print(f"\n{failed} file(s) failed")
+        return 1
+
     for relpath, old, new, why in EDITS:
         path = root / relpath
         if not path.is_file():
@@ -298,7 +953,8 @@ def main() -> int:
         print(f"\n{failed} edit(s) failed; the tree does not match what this "
               f"script expects. Nothing was written.")
         return 1
-    print(f"\nall {len(EDITS)} edits applied" if not check else "\nall edits match")
+    print(f"\nall {len(FILES)} files and {len(EDITS)} edits applied"
+          if not check else "\nall files and edits match")
     return 0
 
 
