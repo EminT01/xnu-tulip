@@ -1,0 +1,124 @@
+name: xnu-tulip
+
+# Builds this fork with blacktop/darwin-xnu-build (dxb). The tree itself is already
+# patched (TULIP machine config), so no patch stack is applied; dxb only supplies the
+# macOS/KDK environment, mig/ctf tools and libfirehose_kernel.
+#
+# The 4K page-size change is applied here automatically, so the repo can stay identical
+# to upstream. Once the tree is fixed, delete the "4K" step.
+
+on:
+  workflow_dispatch:
+    inputs:
+      kernel_config:
+        description: RELEASE / DEVELOPMENT / DEBUG
+        default: DEVELOPMENT
+      macos_version:
+        description: macOS release whose xnu to build (13.5 = xnu-8796, iOS 16 era)
+        default: "13.5"
+  push:
+    branches: [tulip]
+    paths:
+      - "pexpert/pexpert/arm64/TULIP.h"
+      - ".github/workflows/xnu-tulip.yml"
+
+concurrency:
+  group: xnu-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DXB_REPO: https://github.com/blacktop/darwin-xnu-build
+  DXB_SHA: 663906528d1cd5ea8fde7de6f16de73db9511549
+  MACOS_VERSION: ${{ inputs.macos_version || '13.5' }}
+  KERNEL_CONFIG: ${{ inputs.kernel_config || 'DEVELOPMENT' }}
+  MACHINE_CONFIG: TULIP
+  ARCH_CONFIG: ARM64
+
+jobs:
+  build:
+    runs-on: macos-14          # Xcode 15.x, iig matches the xnu-8796 IORPC ABI
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: xnu-src
+
+      - name: Fetch dxb build script
+        run: |
+          git init -q dxb
+          git -C dxb fetch -q --depth 1 "$DXB_REPO" "$DXB_SHA"
+          git -C dxb checkout -q FETCH_HEAD
+
+      - name: Use this repo as the XNU source
+        run: |
+          # dxb clones Apple's xnu only when dxb/xnu is missing; give it ours instead.
+          rm -rf dxb/xnu dxb/patches
+          mv xnu-src dxb/xnu
+          mkdir -p dxb/patches
+          # TULIP looks for libfirehose_kernel in .../kernel/tulip; dxb installs it in .../kernel.
+          sed -i '' 's|/usr/local/lib/kernel/tulip|/usr/local/lib/kernel|g' dxb/xnu/makedefs/MakeInc.def
+          grep -n 'LDFLAGS_KERNEL_SDK' dxb/xnu/makedefs/MakeInc.def
+
+      - name: TULIP.h -> 4K granule
+        run: |
+          python3 - <<'PY'
+          import pathlib, re
+          p = pathlib.Path('dxb/xnu/pexpert/pexpert/arm64/TULIP.h')
+          s = p.read_text()
+          if '__ARM_16K_PG__' in s:
+              s = re.sub(r'^#define\s+__ARM_16K_PG__.*\n', '', s, flags=re.M)
+              s = re.sub(r'^#define\s+__ARM_MIXED_PAGE_SIZE__.*$',
+                         '#define __ARM_MIXED_PAGE_SIZE__   0', s, flags=re.M)
+              assert '__ARM_16K_PG__' not in s
+              p.write_text(s)
+              print('[ok] TULIP.h: 16K removed, __ARM_MIXED_PAGE_SIZE__ 0')
+          else:
+              print('[ok] TULIP.h already 4K')
+          PY
+
+      - name: libfirehose_kernel for arm64
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          p = pathlib.Path('dxb/build.sh')
+          s = p.read_text()
+          old = 'ARCHS="x86_64 arm64e" VALID_ARCHS="x86_64 arm64e"'
+          new = ('ARCHS="arm64" VALID_ARCHS="arm64" '
+                 'OTHER_CFLAGS="-mkernel -nostdinc -Wno-packed -march=armv8-a -mcpu=cortex-a53"')
+          assert old in s, 'libfirehose arch line not found'
+          p.write_text(s.replace(old, new, 1))
+          print('[ok] libfirehose_kernel -> arm64')
+          PY
+
+      - name: Dependencies
+        run: |
+          brew install jq gum bash cmake ninja
+          printf '#!/bin/sh\nexit 0\n' | sudo tee /usr/local/bin/xcodes >/dev/null
+          sudo chmod +x /usr/local/bin/xcodes
+          XC=$(ls -d /Applications/Xcode_*.app | sort -V | head -1)
+          echo "DEVELOPER_DIR=$XC/Contents/Developer" >> "$GITHUB_ENV"
+          sudo xcode-select -s "$XC"
+          sw_vers
+          xcodebuild -version
+
+      - name: Build XNU (TULIP, 4K)
+        working-directory: dxb
+        env:
+          MAKEFLAGS: "-k"
+        run: bash build.sh
+
+      - name: Collect kernel
+        if: always()
+        run: |
+          mkdir -p out
+          cp -v dxb/build/xnu.obj/kernel.* out/ 2>/dev/null || true
+          (cd out && shasum -a 256 kernel.* > SHA256SUMS 2>/dev/null) || true
+          ls -la out
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: xnu-kernel-tulip
+          path: out/
+          if-no-files-found: warn
+          retention-days: 7
