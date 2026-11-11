@@ -1,0 +1,146 @@
+<6>[    0.000000] Reserved memory: reserved region for node 'splash_region@9d400000': base 0x000000009d400000, size 36 MiB
+<6>[    0.916330] dsi_panel_device_register: Continuous splash enabled
+<6>[    0.916680] mdss_register_panel: adding framebuffer device c994000.qcom,mdss_dsi_ctrl0
+<6>[    0.921870] mdss_register_panel: adding framebuffer device soc:qcom,mdss_wb_panel
+<6>[    0.922813] mdss_fb_register: FrameBuffer[0] 1080x2280 registered successfully!
+<6>[    0.923510] mdss_fb_register: FrameBuffer[1] 640x480 registered successfully!
+<3>[    0.923680] mdss_mdp_splash_parse_dt: splash mem child node is not present
+<6>[    1.024255] [FTS][Info]display x(0 1080) y(0 2280)
+<6>[    1.024265] [FTS][Info]VK(0): (0, 0, 0), [0, 0, 0][2500]
+<6>[    1.024318] [FTS][Info]max touch number:10, irq gpio:67, reset gpio:66
+<6>[    1.024436] [FTS][Info]set key capabilities
+<6>[    1.024516] input: fts_ts as /devices/soc/c175000.i2c/i2c-1/1-0038/input/input2
+<3>[    1.024755] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.024875] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.024994] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.025112] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.025230] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.025347] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.130164] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.130283] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.130399] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.130517] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.130633] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.130748] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.240257] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.240375] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.240492] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.240611] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.240729] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.240846] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.350152] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.350270] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.350386] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.350504] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.350622] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.350740] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.460154] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.460272] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.460387] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.460504] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.460621] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.460739] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.570188] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.570311] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.570434] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.570556] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.570676] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.570798] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.680174] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.680297] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.680420] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.680542] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.680663] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.680784] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.790172] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.790295] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.790421] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.790544] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.790665] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.790787] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.900170] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.900293] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.900415] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.900538] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.900660] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    1.900782] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    2.010180] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    2.010302] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    2.010425] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    2.010548] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    2.010670] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<3>[    2.010791] [FTS][Error][IIC]: i2c_transfer(write) error, ret=-107!!
+<6>[    2.120051] [FTS][Info]fw is invalid, need read boot id
+<3>[    2.120177] [FTS][Error]fts_i2c_write: i2c_transfer(write) error, ret=-107
+<3>[    2.120298] [FTS][Error]fts_i2c_write: i2c_transfer(write) error, ret=-107
+<3>[    2.120420] [FTS][Error]fts_i2c_write: i2c_transfer(write) error, ret=-107
+<3>[    2.120426] [FTS][Error]start cmd write fail
+<3>[    2.120431] [FTS][Error]not focal IC, unregister driver
+<4>[    2.120641] fts_ts: probe of 1-0038 failed with error -107
+<3>[    2.120693] [NVT-ts] nvt_driver_init 1746: start
+<3>[    2.120738] [NVT-ts] nvt_ts_probe 1219: start
+<3>[    2.120807] [NVT-ts] nvt_parse_dt 768: novatek,irq-gpio=67
+<3>[    2.240505] [NVT-ts] nvt_ts_check_chip_ver_trim 1160: buf[1]=0x0A, buf[2]=0x00, buf[3]=0x00, buf[4]=0x72, buf[5]=0x66, buf[6]=0x03
+<3>[    2.240513] [NVT-ts] nvt_ts_check_chip_ver_trim 1186: This is NVT touch IC
+<4>[    2.311028] yjz nvt_get_fw_info 1 
+<3>[    2.311395] [NVT-ts] nvt_read_pid 395: PID=590B
+<6>[    2.312692] input: NVTCapacitiveTouchScreen as /devices/virtual/input/input3
+<3>[    2.312749] [NVT-ts] nvt_ts_probe 1366: int_trigger_type=1
+<3>[    2.312800] [NVT-ts] nvt_ts_probe 1378: request irq 242 succeed
+<3>[    2.315141] [NVT-ts] nvt_flash_proc_init 629: Succeeded!
+<3>[    2.315147] [NVT-ts] nvt_flash_proc_init 632: ============================================================
+<3>[    2.315152] [NVT-ts] nvt_flash_proc_init 633: Create /proc/NVTflash
+<3>[    2.315157] [NVT-ts] nvt_flash_proc_init 634: ============================================================
+<3>[    2.315169] [NVT-ts] nvt_extra_proc_init 803: create proc/nvt_fw_version Succeeded!
+<3>[    2.315179] [NVT-ts] nvt_extra_proc_init 811: create proc/nvt_baseline Succeeded!
+<3>[    2.315188] [NVT-ts] nvt_extra_proc_init 819: create proc/nvt_raw Succeeded!
+<3>[    2.315196] [NVT-ts] nvt_extra_proc_init 827: create proc/nvt_diff Succeeded!
+<3>[    2.315203] [NVT-ts] nvt_extra_proc_init 835: create proc/tp_lockdown_info Succeeded!
+<3>[    2.315237] [NVT-ts] nvt_mp_proc_init 1962: create /proc/nvt_selftest Succeeded!
+<3>[    2.315243] [NVT-ts] nvt_ts_probe 1445: end
+<6>[    2.315277] nvt_driver_init: finished
+<3>[    5.788382] [NVT-ts] nvt_ts_suspend 1529: start
+<3>[    5.840064] [NVT-ts] nvt_ts_suspend 1582: end
+<3>[    5.840295] [NVT-ts] nvt_ts_resume 1603: start
+<3>[    5.910324] [NVT-ts] nvt_ts_resume 1635: end
+<3>[    5.948211] [NVT-ts] nvt_ts_suspend 1529: start
+<3>[    6.000058] [NVT-ts] nvt_ts_suspend 1582: end
+<3>[    6.369751] [NVT-ts] nvt_ts_resume 1603: start
+<3>[    6.430328] [NVT-ts] nvt_ts_resume 1635: end
+<6>[   12.067688] SELinux:  Context u:object_r:nvt_data_file:s0 is not valid (left unmapped).
+<3>[   16.320057] [NVT-ts] nvt_get_oem_data 609: ++
+<3>[   16.400382] [NVT-ts] Init_BootLoader 347: Init OK 
+<3>[   16.470091] [NVT-ts] Resume_PD 192: Resume PD OK
+<3>[   16.600376] [NVT-ts] nvt_get_oem_data 719: --
+<3>[   16.600384] [NVT-ts] nvt_get_xiaomi_lockdown_info 735: The maker of Touch Panel & CG Lamination: 0x46
+<3>[   16.600389] [NVT-ts] nvt_get_xiaomi_lockdown_info 737: Display maker: 0x36
+<3>[   16.600394] [NVT-ts] nvt_get_xiaomi_lockdown_info 739: CG ink color: 0x32
+<3>[   16.600399] [NVT-ts] nvt_get_xiaomi_lockdown_info 741: HW version: 0x03
+<3>[   16.600404] [NVT-ts] nvt_get_xiaomi_lockdown_info 743: Project ID: 0x0054
+<3>[   16.600409] [NVT-ts] nvt_get_xiaomi_lockdown_info 745: CG maker: 0x31
+<3>[   16.600413] [NVT-ts] nvt_get_xiaomi_lockdown_info 747: Reservation byte: 0x00
+<3>[   16.600419] [NVT-ts] Boot_Update_Firmware 1003: firmware version is tianma gg5. 
+<3>[   16.600425] [NVT-ts] update_firmware_request 59: filename is novatek/tianma_nt36672a_miui_e7t.bin
+<3>[   16.670176] [NVT-ts] Resume_PD 192: Resume PD OK
+<3>[   16.850813] [NVT-ts] Check_CheckSum 295: firmware checksum match
+<3>[   16.900261] [NVT-ts] Init_BootLoader 347: Init OK 
+<3>[   16.970147] [NVT-ts] Resume_PD 192: Resume PD OK
+<3>[   17.050350] [NVT-ts] nvt_check_flash_end_flag 970: nvt_end_flag=NVT (4E 56 54)
+<4>[   17.121180] Workqueue: nvt_fwu_wq Boot_Update_Firmware
+<4>[   17.121667] [<ffffff9d562fab30>] nvt_get_fw_info+0x220/0x2fc
+<4>[   17.121770] Workqueue: nvt_fwu_wq Boot_Update_Firmware
+<4>[   17.122227] [<ffffff9d562fab30>] nvt_get_fw_info+0x220/0x2fc
+<4>[   17.122264] yjz nvt_get_fw_info 1 
+<3>[   17.122623] [NVT-ts] nvt_read_pid 395: PID=590B
+<3>[  327.551784] [NVT-ts] nvt_ts_suspend 1529: start
+<3>[  327.610064] [NVT-ts] nvt_ts_suspend 1582: end
+<3>[  989.681288] [NVT-ts] nvt_ts_resume 1603: start
+<3>[  989.750350] [NVT-ts] nvt_ts_resume 1635: end
+<3>[ 1603.627815] [NVT-ts] nvt_ts_suspend 1529: start
+<3>[ 1603.680072] [NVT-ts] nvt_ts_suspend 1582: end
+<3>[ 3853.708617] [NVT-ts] nvt_ts_resume 1603: start
+<3>[ 3853.770361] [NVT-ts] nvt_ts_resume 1635: end
+<3>[ 4157.513147] [NVT-ts] nvt_ts_suspend 1529: start
+<3>[ 4157.570076] [NVT-ts] nvt_ts_suspend 1582: end
+<3>[ 4211.706883] [NVT-ts] nvt_ts_resume 1603: start
+<3>[ 4211.770369] [NVT-ts] nvt_ts_resume 1635: end
