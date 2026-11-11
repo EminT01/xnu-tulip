@@ -1039,6 +1039,59 @@ edit(
 )
 
 
+# --------------------------------------------------------------------------
+# 12. Fine-grained probes between "MMU on" and the KVA switch: the green
+#     probe at 220 paints, the cyan one at 280 does not, so the hang is in
+#     the handful of system-register instructions in between.
+# --------------------------------------------------------------------------
+edit(
+    "osfmk/arm64/start.s",
+    "\tMOV64   x1, SCTLR_EL1_DEFAULT\n"
+    "\tcmp\t\tx0, x1\n"
+    "\tbne\t\t.\n"
+    "#endif /* !VMAPPLE */\n",
+    "\tMOV64   x1, SCTLR_EL1_DEFAULT\n"
+    "\tcmp\t\tx0, x1\n"
+    "\tbne\t\t.\n"
+    "#endif /* !VMAPPLE */\n"
+    "#if defined(TULIP)\n"
+    "\t/* Probe: the SCTLR readback check was passed. */\n"
+    "\tTULIP_EARLY_MARK 480, 0xffffff\n"
+    "#endif\n",
+    "probe 480: SCTLR check passed",
+)
+
+edit(
+    "osfmk/arm64/start.s",
+    "\t// Enable NEON\n"
+    "\tmov\t\tx0, #(CPACR_FPEN_ENABLE)\n"
+    "\tmsr\t\tCPACR_EL1, x0\n"
+    "#endif\n",
+    "\t// Enable NEON\n"
+    "\tmov\t\tx0, #(CPACR_FPEN_ENABLE)\n"
+    "\tmsr\t\tCPACR_EL1, x0\n"
+    "#endif\n"
+    "#if defined(TULIP)\n"
+    "\t/* Probe: CPACR_EL1 write completed (it did not trap to EL3). */\n"
+    "\tTULIP_EARLY_MARK 520, 0x808080\n"
+    "#endif\n",
+    "probe 520: CPACR written",
+)
+
+edit(
+    "osfmk/arm64/start.s",
+    "\t// If x21 != 0, we're doing a warm reset, so we need to trampoline to the kernel pmap.\n"
+    "\tcbnz\tx21, Ltrampoline\n",
+    "#if defined(TULIP)\n"
+    "\t/* Probe: all post-MMU system register setup is done. */\n"
+    "\tTULIP_EARLY_MARK 560, 0x800000\n"
+    "#endif\n"
+    "\t// If x21 != 0, we're doing a warm reset, so we need to trampoline to the kernel pmap.\n"
+    "\tcbnz\tx21, Ltrampoline\n",
+    "probe 560: post-MMU setup done",
+)
+
+
 def main() -> int:
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     check = "--check" in sys.argv[1:]
